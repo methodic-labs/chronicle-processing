@@ -190,6 +190,7 @@ def extract_usage(dataframe,precision=3600):
                     timepoints['app_timezone'] = row.app_timezone
                     timepoints['date_tzaware'] = row.date_tzaware
                     timepoints['study_id'] = row.study_id
+                    timepoints['app_title'] = row.app_title
 
                     alldata.append(timepoints)
 
@@ -212,6 +213,7 @@ def extract_usage(dataframe,precision=3600):
                 timepoints['app_timezone'] = row.app_timezone
                 timepoints['date_tzaware'] = row.date_tzaware
                 timepoints['study_id'] = row.study_id
+                timepoints['app_title'] = row.app_title
 
                 alldata.append(timepoints)
                 
@@ -236,6 +238,7 @@ def extract_usage(dataframe,precision=3600):
                     timepoints['app_timezone'] = row.app_timezone
                     timepoints['date_tzaware'] = row.date_tzaware
                     timepoints['study_id'] = row.study_id
+                    timepoints['app_title'] = row.app_title
 
                     alldata.append(timepoints)
                     
@@ -249,13 +252,14 @@ def extract_usage(dataframe,precision=3600):
             timepoints['app_timezone'] = row.app_timezone
             timepoints['date_tzaware'] = row.date_tzaware
             timepoints['study_id'] = row.study_id
+            timepoints['app_title'] = row.app_title
             alldata.append(timepoints)
 
     if len(alldata)>0:
         alldata = pd.concat(alldata, axis=0)
         alldata = alldata.sort_values(by=[columns.prep_datetime_start, columns.prep_datetime_end]).reset_index(drop=True)
         cols_to_select = list(set(cols).intersection(set(alldata.columns)))
-        cols_to_select.extend(['app_timezone', 'date_tzaware', 'study_id'])
+        cols_to_select.extend(['app_timezone', 'date_tzaware', 'study_id', 'app_title'])
         return alldata[cols_to_select].reset_index(drop=True)
 
 
