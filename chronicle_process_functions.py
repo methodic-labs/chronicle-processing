@@ -76,30 +76,39 @@ def search_timebin(
         print("#---------------------------------------------------------#")
         print(f"Searching {starttime_chunk} to {endtime_chunk}")
 
-        count_of_data = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine, counting=True, users=participants, studies=studies)
+        first_count = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
+                                        counting=True, users=participants, studies=studies)
+        count_of_data = first_count
 
-        # If there are too many results: make interval narrower and redo
+        if (count_of_data < 1000):
+            print(f"There are few data points, expanding to {time_interval * 2} minute intervals and redoing search")
+            refined_time = time_interval * 2
+            end_interval = starttime_chunk + timedelta(minutes=refined_time)
+            print(f"Now searching between {starttime_chunk} and {end_interval}.")
+
+            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+                                             users=participants, studies=studies)
+            count_of_data = second_count
+            endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
+            time_interval = refined_time
+            continue
+
         if (count_of_data > 50000):
-            if time_interval < 0.001:
-                raise ValueError(f"There are too many hits ({count_of_data}) for this date in < 0.001 seconds.")
-
             print(
-                f"There are more hits than 50K for this interval and condition ({count_of_data}), narrowing to {time_interval / 2} minute intervals and redoing search")
+                f"There are more hits than 50K for this interval, narrowing to {time_interval / 2} minute intervals and redoing search")
             refined_time = time_interval / 2
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
-            count_of_data = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True, users=participants, studies=studies)
-            print(f"Refined count: {count_of_data}, getting data.")
 
-            data = query_usage_table.run(starttime_chunk, end_interval, filters, engine, users=participants)
-            for row in data:
-                row_as_dict = dict(row)
-                all_hits.append(row_as_dict)
-
+            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+                                             users=participants, studies=studies)
+            count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
+            time_interval = refined_time
+            continue
 
-        # If < 50k results:
         print(f"There are {count_of_data} data points, getting data.")
+
         data = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine, users=participants, studies=studies)
         # print(f"data object from raw table query is of type {type(data)}")
         for row in data:
@@ -107,7 +116,7 @@ def search_timebin(
             all_hits.append(row_as_dict)
 
         starttime_chunk = min(endtime_chunk, endtime_range)  # advance the start time to the end of the search chunk
-        # print(f"all_hits is of type {print(type(all_hits))}")
+        time_interval = 60  # reset to original
     return pd.DataFrame(all_hits)
 
 
