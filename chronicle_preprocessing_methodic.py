@@ -6,7 +6,7 @@ import dateutil
 import pytz
 
 from pymethodic.pymethodic import utils as ut
-import chronicle_processor
+import chronicle_process_functions
 
 #------- Can process by DATE
 # Also by specific participant and/or by STUDY
@@ -63,7 +63,7 @@ def chronicle_process_by_date(startdatetime, enddatetime, engine,
         ut.logger("Grabbing data...", level=0)
 
         # GET RAW DATA - filter by studies and/or participants
-        data_written = chronicle_processor.search_timebin(
+        data_written = chronicle_process_functions.search_timebin(
             start_iso,
             end_iso,
             engine,
@@ -160,7 +160,7 @@ def chronicle_process(rawdatatable, startdatetime = None, enddatetime = None, da
 
 
             # PREPROCESSING - 1 person at a time. RETURNS DF
-            person_df_preprocessed = chronicle_processor.get_person_preprocessed_data(
+            person_df_preprocessed = chronicle_process_functions.get_person_preprocessed_data(
                 person,
                 rawdatatable,
                 # constants,
@@ -194,34 +194,6 @@ def main():
     engine = sq.create_engine(f'postgresql://{opts.dbuser}:{opts.password}@{opts.hostname}:{opts.port}/redshift')
 
     chronicle_process_by_date(opts.startdatetime, opts.enddatetime, engine, opts.daysback, opts.participants, opts.by_study)
-
-    # if opts.organization == "CAFE":
-    #     constants = {
-    #         'chronicle_study_id': entitySetsAPI.get_entity_set_id(es_constants.chronicle_study["study"]),
-    #         'chronicle_app_data_id': entitySetsAPI.get_entity_set_id(es_constants.chronicle_study["app_data"]),
-    #         'chronicle_preprocessed_app_data_id': entitySetsAPI.get_entity_set_id(es_constants.chronicle_study["preprocessed_data"]),
-    #         'chronicle_recorded_by_id': entitySetsAPI.get_entity_set_id(es_constants.chronicle_study["recorded_by"]),
-    #         'chronicle_device_id': entitySetsAPI.get_entity_set_id(es_constants.chronicle_study["device"])
-    #     }
-    #
-    # else:
-    #     constants = {
-    #         'chronicle_study_id': entitySetsAPI.get_entity_set_id(f"chronicle_{opts.organization}_{es_constants.new_config_study['study']}"),
-    #         'chronicle_app_data_id': entitySetsAPI.get_entity_set_id(f"chronicle_data_collection_{opts.organization}_{es_constants.new_config_study['app_data']}"),
-    #         'chronicle_preprocessed_app_data_id': entitySetsAPI.get_entity_set_id(f"chronicle_data_collection_{opts.organization}_{es_constants.new_config_study['preprocessed_data']}"),
-    #         'chronicle_recorded_by_id': entitySetsAPI.get_entity_set_id(f"chronicle_data_collection_{opts.organization}_{es_constants.new_config_study['recorded_by']}"),
-    #         'chronicle_device_id': entitySetsAPI.get_entity_set_id(f"chronicle_data_collection_{opts.organization}_{es_constants.new_config_study['device']}")
-    #     }
-    #
-    # constants['person_entitytype_id'] = edmAPI.get_entity_type_id(namespace = "general", name = "person")
-    # constants['raw_properties'] = {x: edmAPI.get_property_type_id(x.split(".")[0], x.split('.')[1]) for x in raw_props}
-    # constants['prep_properties'] = {x: edmAPI.get_property_type_id(x.split(".")[0], x.split(".")[1]) for x in prep_props}
-    # constants['org'] = opts.organization
-
-    # if opts.by_study:
-    #     chronicle_process_by_study(constants, opts.studies, opts.participants)
-    # else:
-    #     chronicle_process_by_date(opts.startdatetime, opts.enddatetime, engine, opts.daysback, opts.participants)
 
 if __name__ == '__main__':
     main()

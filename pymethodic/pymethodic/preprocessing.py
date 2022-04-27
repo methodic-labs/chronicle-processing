@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pytz import timezone
+from prefect import task
 import pandas as pd
 import numpy as np
 import os
@@ -7,6 +8,7 @@ import os
 from .constants import interactions, columns
 from . import utils
 
+@task
 def read_data(filenm):
     ''' Used in the "preprocess_folder" function.'''
     personid = "-".join(str(filenm).split(".")[-2].split("ChronicleData-")[1:])
@@ -14,7 +16,7 @@ def read_data(filenm):
     thisdata['person'] = personid
     return thisdata
     
-
+@task
 def clean_data(thisdata):
     '''
     This function transforms a csv file (or dataframe?) into a clean dataset:
@@ -23,14 +25,14 @@ def clean_data(thisdata):
     - extracts datetime information and rounds to 10ms
     - sorts events from the same 10ms by (1) foreground, (2) background
     '''
-    utils.logger("Cleaning data", level = 1)
+    utils.logger.run("Cleaning data", level = 1)
     thisdata = thisdata.dropna(subset=['app_record_type', 'app_date_logged'])
     thisdata = thisdata.drop_duplicates(ignore_index = True)
     if len(thisdata)==0:
         return(thisdata)
     thisdata = thisdata[thisdata['app_record_type'] != 'Usage Stat']
     if not 'app_timezone' in thisdata.keys() or any(thisdata['app_timezone']==None):
-        utils.logger("WARNING: Record has no timezone information.  Registering reported time.")
+        utils.logger.run("WARNING: Record has no timezone information.  Registering reported time as UTC.")
         thisdata['app_timezone'] = "UTC"
     if not 'app_title' in thisdata.columns:
         thisdata['app_title'] = ""
@@ -46,11 +48,13 @@ def clean_data(thisdata):
 
     return thisdata.drop(['action'],axis=1)
 
+@task
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
     Returns a dataframe with the number of rows the number of time units (= precision).
     Precision in seconds.
+    USE LOCAL TIME to extract the correct date (include timezone)
     '''
     if not prevtime:
         starttime = curtime
@@ -82,6 +86,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     delta = timedelta(seconds=0)
     outtime = []
 
+    # START TIME IS SOMETIMES PREVIOUS TIME INSTEAD OF DATE LOGGED - HERE'S WHERE THE DISCREPANCY COMES IN.
     for timepoint in range(timepoints_n+1):
         starttime = prevtime if timepoint == 0 else prevtimerounded+delta
         endtime = curtime if timepoint == timepoints_n else prevtimerounded+delta+timedelta(seconds=precision)
@@ -110,6 +115,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
 
     return pd.DataFrame(outtime)
 
+@task
 def extract_usage(dataframe,precision=3600):
     '''
     Function to extract usage from a filename.
@@ -121,8 +127,8 @@ def extract_usage(dataframe,precision=3600):
             'app_full_name',
             'application_label',
             'date',
-            'app_start_timestamp',
-            'app_end_timestamp',
+            'app_datetime_start', #'app_start_timestamp',
+            'app_datetime_end', #'app_end_timestamp',
             'starttime',
             'endtime',
             'day',  # note: starts on Sunday !
@@ -132,7 +138,7 @@ def extract_usage(dataframe,precision=3600):
             'hour',
             'quarter',
             'app_duration_seconds',
-            'app_data_type']
+            'app_record_type'] #'app_data_type'
 
     other_interactions = {
         'Unknown importance: 16': "Screen Non-interactive",
@@ -143,7 +149,7 @@ def extract_usage(dataframe,precision=3600):
 
     alldata = []
 
-    rawdata = clean_data(dataframe)
+    rawdata = clean_data.run(dataframe)
     openapps = {}
     latest_unbackgrounded = False
 
@@ -152,43 +158,40 @@ def extract_usage(dataframe,precision=3600):
         interaction = row['app_record_type']
         app = row['app_full_name']
 
-        # Ensure app timestamp is in UTC
-        curtime = row.app_date_logged
-        curtime_zulustring = curtime.astimezone(tz=timezone("UTC")).strftime("%Y-%m-%d %H:%M:%S")
+        # USE LOCAL TIME - must be for `get_timestamps` to be correct when it infers dates
+        curtime = row.date_tzaware #app_date_logged.
 
+        # make dict entry of every app that was moved to foreground. Time is local.
         if interaction == 'Move to Foreground':
             openapps[app] = {"open" : True,
                              "time": curtime}
 
-            # iterate through older apps
+            # Iterate through older apps
             # if the app isn't the old app, then it's no longer opened, so "close" all of the other apps
+            # only the latest Foregrounded is "open"
             for olderapp, appdata in openapps.items():
-                
                 if app == olderapp:
                     continue
-                                        
+                # dict of the ONE app immediately preceding the "open" one.
+                # Foregrd time = timestamp of the app after it = timestamp of when it became not in the foreground
+                # Backgrd time = its own timestamp = time when it went to foreground (aka was "unbackgrounded")
                 if appdata['open'] == True and appdata['time'] < curtime:
-                    
                     latest_unbackgrounded = {'unbgd_app':olderapp, 'fg_time':curtime, 'unbgd_time':appdata['time']}
-
-                    # utils.logger(f"WARNING: App {app} is moved to foreground on {curtime_zulustring}\
-                    #                 but {olderapp} was still open.  Discarding {olderapp} now...")
-
                     openapps[olderapp]['open'] = False
 
         # if it's an app in the background
         if interaction == 'Move to Background':
 
+            # ONLY treats the one latest unbackgrounded app.
             if latest_unbackgrounded and app == latest_unbackgrounded['unbgd_app']:
                 timediff = curtime - latest_unbackgrounded['fg_time']
                 
                 if timediff < timedelta(seconds=1):
 
-                    timepoints = get_timestamps(curtime, latest_unbackgrounded['unbgd_time'], precision=precision, row=row)
+                    timepoints = get_timestamps.run(curtime, latest_unbackgrounded['unbgd_time'], precision=precision, row=row)
 
                     timepoints[columns.prep_record_type] = 'App Usage'
                     timepoints['app_timezone'] = row.app_timezone
-                    timepoints['date_tzaware'] = row.date_tzaware
                     timepoints['study_id'] = row.study_id
                     timepoints['app_title'] = row.app_title
 
@@ -196,22 +199,22 @@ def extract_usage(dataframe,precision=3600):
 
                     openapps[app]['open'] = False
 
-                    latest_unbackgrounded = False
+                    latest_unbackgrounded = False # reset to empty
 
+            # ONLY the one open app.
             if app in openapps.keys() and openapps[app]['open']==True:
 
-                # get time of opening
+                # get time of opening - the raw data timestamp
                 prevtime = openapps[app]['time']
 
                 if curtime-prevtime<timedelta(0):
                     raise ValueError("ALARM ALARM: timepoints out of order !!")
 
                 # split up timepoints by precision
-                timepoints = get_timestamps(curtime,prevtime,precision=precision,row=row)
+                timepoints = get_timestamps.run(curtime,prevtime,precision=precision,row=row)
 
                 timepoints[columns.prep_record_type] = 'App Usage'
                 timepoints['app_timezone'] = row.app_timezone
-                timepoints['date_tzaware'] = row.date_tzaware
                 timepoints['study_id'] = row.study_id
                 timepoints['app_title'] = row.app_title
 
@@ -232,11 +235,10 @@ def extract_usage(dataframe,precision=3600):
                         raise ValueError("ALARM ALARM: timepoints out of order !!")
                     
                     # split up timepoints by precision
-                    timepoints = get_timestamps(curtime,prevtime,precision=precision,row=row)
+                    timepoints = get_timestamps.run(curtime,prevtime,precision=precision,row=row)
                     
                     timepoints[columns.prep_record_type] = 'Power Off'
                     timepoints['app_timezone'] = row.app_timezone
-                    timepoints['date_tzaware'] = row.date_tzaware
                     timepoints['study_id'] = row.study_id
                     timepoints['app_title'] = row.app_title
 
@@ -247,10 +249,9 @@ def extract_usage(dataframe,precision=3600):
         # if the interaction is a part of screen non/interactive or notifications...
         # logic should be the same
         if interaction in other_interactions.keys():
-            timepoints = get_timestamps(curtime, precision=precision, row=row)
+            timepoints = get_timestamps.run(curtime, precision=precision, row=row)
             timepoints[columns.prep_record_type] = other_interactions[interaction]
             timepoints['app_timezone'] = row.app_timezone
-            timepoints['date_tzaware'] = row.date_tzaware
             timepoints['study_id'] = row.study_id
             timepoints['app_title'] = row.app_title
             alldata.append(timepoints)
@@ -259,10 +260,10 @@ def extract_usage(dataframe,precision=3600):
         alldata = pd.concat(alldata, axis=0)
         alldata = alldata.sort_values(by=[columns.prep_datetime_start, columns.prep_datetime_end]).reset_index(drop=True)
         cols_to_select = list(set(cols).intersection(set(alldata.columns)))
-        cols_to_select.extend(['app_timezone', 'date_tzaware', 'study_id', 'app_title'])
+        cols_to_select.extend(['app_timezone', 'study_id', 'app_title'])
         return alldata[cols_to_select].reset_index(drop=True)
 
-
+@task
 def check_overlap_add_sessions(data, session_def = [5*60]):
     '''
     Function to loop over dataset, spot overlaps (and remove them), and add columns
@@ -273,7 +274,7 @@ def check_overlap_add_sessions(data, session_def = [5*60]):
 
     # # Create session column(s) - one per session input argument. Usually one.
     for sess in session_def:
-        data_nonzero[f'app_engage_{int(sess)}'] = 0
+        data_nonzero[f'app_engage_{int(sess)}s'] = 0
 
     data_nonzero[columns.switch_app] = 0
     # Loop over dataset:
@@ -282,7 +283,7 @@ def check_overlap_add_sessions(data, session_def = [5*60]):
     for idx,row in data_nonzero.iterrows():
         if idx == 0:
             for sess in session_def:
-                data_nonzero.at[idx, 'app_engage_%is'%int(sess)] = 1 #1st row: automatically set 'app_engage_300'==1
+                data_nonzero.at[idx, f'app_engage_{int(sess)}s'] = 1 #1st row: automatically set 'app_engage_300'==1
 
         # Create timedelta of starttime - endtime(previous row)
         nousetime = row[columns.prep_datetime_start].astimezone(timezone("UTC")) - data_nonzero[columns.prep_datetime_end].iloc[idx - 1].astimezone(timezone("UTC"))
@@ -302,13 +303,14 @@ def check_overlap_add_sessions(data, session_def = [5*60]):
         else:
             for sess in session_def:
                 if nousetime > timedelta(seconds = sess):
-                    data_nonzero.at[idx, 'app_engage_%is'%int(sess)] = 1
+                    data_nonzero.at[idx, f'app_engage_{int(sess)}s'] = 1
 
         # Populate app_switched_app for all rows. If previous row is the same app, make it 0. If not 1.
         data_nonzero.at[idx, columns.switch_app] = 1-(row[columns.full_name]==data_nonzero[columns.full_name].iloc[idx-1])*1
 
     return data_nonzero.reset_index(drop=True)
 
+@task
 def log_exceed_durations_minutes(row, threshold, outfile):
     timestamp = row[columns.prep_datetime_start].astimezone(tz=timezone("UTC")).strftime("%Y-%m-%d %H:%M:%S")
     with open(outfile, "a+") as fl:
@@ -319,16 +321,17 @@ def log_exceed_durations_minutes(row, threshold, outfile):
             timestamp = timestamp
         ))
 
+@task
 def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
     # dataframe = utils.backwards_compatibility(dataframe)
-    utils.logger("LOG: Extracting usage...",level=1)
-    tmp = extract_usage(dataframe,precision=precision)
+    utils.logger.run("LOG: Extracting usage...",level=1)
+    tmp = extract_usage.run(dataframe,precision=precision)
     if not isinstance(tmp,pd.DataFrame) or np.sum(tmp[columns.prep_duration_seconds]) == 0:
+        utils.logger.run(f"WARNING: File {dataframe} does not seem to contain relevant data.  Skipping...")
         return None
-        utils.logger("WARNING: File %s does not seem to contain relevant data.  Skipping..."%filename)
-    utils.logger("LOG: checking overlap session...",level=1)
-    data = check_overlap_add_sessions(tmp,session_def=sessioninterval)
-    data = utils.add_warnings(data)
+    utils.logger.run("LOG: checking overlap session...",level=1)
+    data = check_overlap_add_sessions.run(tmp,session_def=sessioninterval)
+    data = utils.add_warnings.run(data)
     non_timed = tmp[tmp[columns.prep_duration_seconds].isna()]
     flagcols = [x for x in non_timed.columns if 'engage' in x or 'switch' in x]
     non_timed.loc[:, (flagcols)] = None
@@ -336,21 +339,25 @@ def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
         .sort_values(columns.prep_datetime_start)\
         .reset_index(drop=True)
 
-    return data
+    data_fordownload = data[['study_id', 'participant_id', 'app_record_type', 'app_title', 'app_full_name',
+                             'app_datetime_start', 'app_datetime_end', 'app_timezone', 'app_duration_seconds',
+                             'day', 'weekdayMF', 'weekdayMTh', 'weekdaySTh',
+                             'app_engage_30s', 'app_switched_app', 'app_usage_flags']]
+    return data_fordownload
     
     
-def preprocess_folder(infolder,outfolder,precision=3600,sessioninterval = [5*60], logdir=None, logopts={}):
-
-    if not os.path.exists(outfolder):
-        os.mkdir(outfolder)
-
-    for filename in [x for x in os.listdir(infolder) if x.startswith("Chronicle")]:
-        utils.logger("LOG: Preprocessing file %s..."%filename,level=1)
-        dataframe = read_data(os.path.join(infolder,filename))
-        data = preprocess_dataframe(dataframe, precision=precision,sessioninterval = sessioninterval, logdir=logdir, logopts=logopts)
-        if data is not None:
-            outfilename = filename.replace('ChronicleData','ChronicleData_preprocessed')
-            data.to_csv(os.path.join(outfolder,outfilename),index=False)
+# def preprocess_folder(infolder,outfolder,precision=3600,sessioninterval = [5*60], logdir=None, logopts={}):
+#
+#     if not os.path.exists(outfolder):
+#         os.mkdir(outfolder)
+#
+#     for filename in [x for x in os.listdir(infolder) if x.startswith("Chronicle")]:
+#         utils.logger("LOG: Preprocessing file %s..."%filename,level=1)
+#         dataframe = read_data(os.path.join(infolder,filename))
+#         data = preprocess_dataframe(dataframe, precision=precision,sessioninterval = sessioninterval, logdir=logdir, logopts=logopts)
+#         if data is not None:
+#             outfilename = filename.replace('ChronicleData','ChronicleData_preprocessed')
+#             data.to_csv(os.path.join(outfolder,outfilename),index=False)
 
 def add_preprocessed_columns(data):
     if data.shape[0] == 0:
