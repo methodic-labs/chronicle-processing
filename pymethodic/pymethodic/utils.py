@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from .constants import columns
+from prefect import task
 import dateutil.parser
 import pandas as pd
 import numpy as np
 import pytz
 
-def logger(message,level=1):
+@task
+def logger(message, level=1):
     time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
     print("%s %s: %s"%(prefix,time,message))
@@ -38,6 +40,7 @@ def get_action(row):
     if row[columns.raw_record_type]== 'Move to Background':
         return 1
 
+@task
 def recode(row,recode):
     newcols = {x:None for x in recode.columns}
     if row[columns.full_name] in recode.index:
@@ -46,6 +49,7 @@ def recode(row,recode):
 
     return pd.Series(newcols)
 
+@task
 def fill_dates(dataset,datelist):
     '''
     This function checks for empty days and fills them with 0's.
@@ -56,7 +60,7 @@ def fill_dates(dataset,datelist):
             dataset = dataset.append(newrow)
     return dataset
 
-
+@task
 def fill_hours(dataset,datelist):
     '''
     This function checks for empty days/hours and fills them with 0's.
@@ -70,6 +74,7 @@ def fill_hours(dataset,datelist):
                 dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_quarters(dataset,datelist):
     '''
     This function checks for empty days/hours/quarters and fills them with 0's.
@@ -84,6 +89,7 @@ def fill_quarters(dataset,datelist):
                     dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_appcat_hourly(dataset,datelist,catlist):
     '''
     This function checks for empty days/hours and fills them with 0's for all categories.
@@ -98,6 +104,7 @@ def fill_appcat_hourly(dataset,datelist,catlist):
                     dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_appcat_quarterly(dataset,datelist,catlist):
     '''
     This function checks for empty days/hours/quarters and fills them with 0's for all categories.
@@ -113,7 +120,7 @@ def fill_appcat_quarterly(dataset,datelist,catlist):
                         dataset = dataset.append(newrow)
     return dataset
 
-
+@task
 def cut_first_last(dataset, includestartend, maxdays, first, last):
     first_parsed = dateutil.parser.parse(str(first))
     last_parsed = dateutil.parser.parse(str(last))
@@ -154,6 +161,7 @@ def cut_first_last(dataset, includestartend, maxdays, first, last):
             
     return dataset, datelist
 
+@task
 def add_session_durations(dataset):
     engagecols = [x for x in dataset.columns if x.startswith('engage')]
     for sescol in engagecols:
@@ -171,6 +179,7 @@ def add_session_durations(dataset):
             dataset.loc[np.arange(lower,upper),newcol] = durs[idx]
     return dataset
 
+@task
 def backwards_compatibility(dataframe):
     dataframe = dataframe.rename(
         columns = {
@@ -192,11 +201,11 @@ def backwards_compatibility(dataframe):
     )
     return dataframe
 
+@task
 def round_down_to_quarter(x):
     if pd.isna(x):
         return None
     return int(np.floor(x.minute / 15.)) + 1
-
 
 def combine_flags(row):
     flags = []
@@ -206,7 +215,7 @@ def combine_flags(row):
         flags.append("LONG APP DURATION")
     return flags
 
-
+@task
 def add_warnings(df):
     df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \

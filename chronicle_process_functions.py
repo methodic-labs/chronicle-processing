@@ -3,12 +3,17 @@ from pymethodic.pymethodic import utils as ut
 # from pymethodic.constants import interactions, columns
 from pymethodic.pymethodic.constants import columns as es
 from datetime import timedelta
+from prefect import task
 # from . import utils as ut
+import pendulum
 import pandas as pd
 import dateutil
 
+TIMEZONE = pendulum.timezone("UTC")
+
+@task
 def query_usage_table(start, end, filters, engine, counting=False, users=[], studies=[]):
-    '''Query on the usage data table - to count and also to grab data.
+    '''Constructs the query on the usage data table - to count and also to grab data.
     users = optional people to select for, input as ['participant_id1', 'participant_id2']
     studies = optional studies to select for, input as ['study_id1', 'study_id2']
     COUNTING: returns a scalar
@@ -35,12 +40,12 @@ def query_usage_table(start, end, filters, engine, counting=False, users=[], stu
 
     return output
 
-
+@task(log_stdout=True)
 def search_timebin(
     start_iso: "start timestamp in ISO string format",
     end_iso: "end timestamp in ISO string format", 
     engine: "sqlalchemy connection engine",
-    participants = [], studies = []):
+    participants = [], studies = []) -> pd.DataFrame:
     '''
     Collects all data points in the chronicle_usage_events table in a certain time interval.
     Returns a pandas dataframe
@@ -64,48 +69,58 @@ def search_timebin(
     ]
 
     all_hits = []
-    time_interval = 30
+    time_interval = 60
 
     while starttime_chunk < endtime_range:
         endtime_chunk = min(endtime_range, starttime_chunk + timedelta(minutes=time_interval))
         print("#---------------------------------------------------------#")
         print(f"Searching {starttime_chunk} to {endtime_chunk}")
 
-        count_of_data = query_usage_table(starttime_chunk, endtime_chunk, filters, engine, counting=True, users=participants, studies=studies)
+        first_count = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
+                                        counting=True, users=participants, studies=studies)
+        count_of_data = first_count
 
-        # If there are too many results: make interval narrower and redo
-        if (count_of_data > 10000):
-            if time_interval < 0.001:
-                raise ValueError(f"There are too many hits ({count_of_data}) for this date in < 0.001 seconds.")
+        if (count_of_data < 1000):
+            print(f"There are few data points, expanding to {time_interval * 2} minute intervals and redoing search")
+            refined_time = time_interval * 2
+            end_interval = starttime_chunk + timedelta(minutes=refined_time)
+            print(f"Now searching between {starttime_chunk} and {end_interval}.")
 
+            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+                                             users=participants, studies=studies)
+            count_of_data = second_count
+            endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
+            time_interval = refined_time
+            continue
+
+        if (count_of_data > 50000):
             print(
-                f"There are more hits than 10K for this interval and condition ({count_of_data}), narrowing to {time_interval / 2} minute intervals and redoing search")
+                f"There are more hits than 50K for this interval, narrowing to {time_interval / 2} minute intervals and redoing search")
             refined_time = time_interval / 2
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
-            count_of_data = query_usage_table(starttime_chunk, end_interval, filters, engine, counting=True, users=participants, studies=studies)
-            print(f"Refined count: {count_of_data}, getting data.")
 
-            data = query_usage_table(starttime_chunk, end_interval, filters, engine, users=participants)
-            for row in data:
-                row_as_dict = dict(row)
-                all_hits.append(row_as_dict)
-
+            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+                                             users=participants, studies=studies)
+            count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
+            time_interval = refined_time
+            continue
 
-        # If < 10k results:
         print(f"There are {count_of_data} data points, getting data.")
-        data = query_usage_table(starttime_chunk, endtime_chunk, filters, engine, users=participants, studies=studies)
+
+        data = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine, users=participants, studies=studies)
+        # print(f"data object from raw table query is of type {type(data)}")
         for row in data:
             row_as_dict = dict(row)
             all_hits.append(row_as_dict)
 
         starttime_chunk = min(endtime_chunk, endtime_range)  # advance the start time to the end of the search chunk
-
+        time_interval = 60  # reset to original
     return pd.DataFrame(all_hits)
 
 
-
+@task(log_stdout=True)
 def get_person_preprocessed_data(
     person: "the participantID",
     datatable: "the raw data",
@@ -119,7 +134,15 @@ def get_person_preprocessed_data(
     '''
 
     df = datatable.loc[datatable['participant_id'] == person]
-    ut.logger(f"Person with ID {person} has {df.shape[0]} datapoints.")
+    print(f"Person with ID {person} has {df.shape[0]} datapoints.")
+
+    column_replacement = es.column_rename
+    df = df.rename(columns=column_replacement)
+
+    timezone = df['app_timezone'].unique()[0]
+    if len(df['app_timezone'].unique()) > 1:
+        ut.logger.run(f"Person with ID {person} has data in > 1 timezone! Investigate manually.")
+        pass
 
     ####----------- Why are we renaming columns? Skipping for now.
     ## ...also seems redundant with 1st step in preprocess_dataframe
@@ -133,11 +156,15 @@ def get_person_preprocessed_data(
     #         for ptid, mtd in property_metadata.items()
     #     }
     # else:
-    column_replacement = es.column_rename
-    df = df.rename(columns = column_replacement)
 
     # subset the data for daily processing, only batches of 5 days at a time
     if startdatetime is not None:
+        startdatetime = str(startdatetime)
+        startdatetime = pendulum.parse(startdatetime, tz=timezone)
+        if enddatetime is not None:
+            enddatetime = str(enddatetime)
+            enddatetime = pendulum.parse(enddatetime, tz=timezone)
+
         # current delta time set to 5 days, though that can totally be subject of change :)
         df['app_date_logged_date'] = pd.to_datetime(df.app_date_logged)
         df = df[(df['app_date_logged_date'] >= startdatetime -  timedelta(days=int(days_back))) & (df['app_date_logged_date'] <= enddatetime)]
@@ -145,7 +172,7 @@ def get_person_preprocessed_data(
         # ut.logger(f"Person with ID {df['participant_id'][0]} has {df.shape[0]} datapoints after filtering.")
 
     ###---------- PREPROCESS HERE!! RERTURNS DF. NEED TO ROWBIND
-    df_prep = preprocessing.preprocess_dataframe(df, sessioninterval = [30])
+    df_prep = preprocessing.preprocess_dataframe.run(df, sessioninterval = [30])
 
     if isinstance(df_prep, None.__class__):
         return df_prep
