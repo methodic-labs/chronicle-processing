@@ -1,10 +1,12 @@
-Metadata-Version: 1.0
+Metadata-Version: 2.1
 Name: pymethodic
-Version: 1.7
-Summary: Package for preprocessing Chronicle data, via Methodic.
+Version: 1.0
+Summary: Package for preprocessing Chronicle data via Methodic.
 Home-page: UNKNOWN
-Author: Methodic
-Author-email: info@getmethodic.com
+Author: Kim @ Methodic
+Author-email: kim@getmethodic.com
 License: GNU GPL v3.0
-Description: UNKNOWN
 Platform: UNKNOWN
+
+UNKNOWN
+

@@ -126,8 +126,8 @@ def get_person_preprocessed_data(
     datatable: "the raw data",
     # constants: "dictionary of constants",
     startdatetime = None,
-    enddatetime = None,
-    days_back = 5
+    enddatetime = None
+    # days_back = 5
 ) -> pd.DataFrame:
     '''
     Select the data to be preprocessed, one person at a time, and run through preprocessor
@@ -165,13 +165,14 @@ def get_person_preprocessed_data(
             enddatetime = str(enddatetime)
             enddatetime = pendulum.parse(enddatetime, tz=timezone)
 
-        # current delta time set to 5 days, though that can totally be subject of change :)
-        df['app_date_logged_date'] = pd.to_datetime(df.app_date_logged)
-        df = df[(df['app_date_logged_date'] >= startdatetime -  timedelta(days=int(days_back))) & (df['app_date_logged_date'] <= enddatetime)]
-        df.drop(['app_date_logged_date'], axis=1, inplace=True)
+        # #-------- MOVE TO SEARCH_TIMEBIN
+        # # current delta time set to 5 days, though that can totally be subject of change :)
+        # df['app_date_logged_date'] = pd.to_datetime(df.app_date_logged)
+        # df = df[(df['app_date_logged_date'] >= startdatetime -  timedelta(days=int(days_back))) & (df['app_date_logged_date'] <= enddatetime)]
+        # df.drop(['app_date_logged_date'], axis=1, inplace=True)
         # ut.logger(f"Person with ID {df['participant_id'][0]} has {df.shape[0]} datapoints after filtering.")
 
-    ###---------- PREPROCESS HERE!! RERTURNS DF. NEED TO ROWBIND
+    ###---------- PREPROCESS HERE!! RETURNS DF. NEED TO ROWBIND
     df_prep = preprocessing.preprocess_dataframe.run(df, sessioninterval = [30])
 
     if isinstance(df_prep, None.__class__):
