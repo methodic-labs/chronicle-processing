@@ -264,8 +264,8 @@ def query_export_table(start, end, timezone, counting=True, users=[], studies=[]
 def write_preprocessed_data(dataset, conn, retries=3):
     # get rid of python NaTs for empty timestamps
     if isinstance(dataset, pd.DataFrame):
-        dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds', 'startdate_tzaware']] = \
-            dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds', 'startdate_tzaware']] \
+        dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds']] = \
+            dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds']] \
                 .replace({np.NaN: None})
 
     start_range = str(min(dataset['app_datetime_start']))
@@ -318,11 +318,11 @@ def write_preprocessed_data(dataset, conn, retries=3):
             dataset2 = dataset.to_numpy()
             args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s)", x) for x in
                                  tuple(map(tuple, dataset2)))
-            write_new_query = "INSERT INTO preprocessed_usage_events (study_id, participant_id, \
+            write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
             app_record_type, app_title, app_full_name,\
             app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
            day, weekdayMF, weekdayMTh, weekdaySTh, \
-           app_engage_30s, app_switched_app, app_usage_flags, startdate_tzaware) VALUES" + args_str.decode("utf-8")
+           app_engage_30s, app_switched_app, app_usage_flags) VALUES" + args_str.decode("utf-8")
             cursor.execute(write_new_query)
         except Exception as e:
             print(e)
