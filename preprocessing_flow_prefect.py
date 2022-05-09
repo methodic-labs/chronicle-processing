@@ -36,8 +36,8 @@ def default_time_params(tz_input="UTC"):
     ''' set default start time - midnight UTC.
     Daily processing needs to go back 2 days to correctly set the flag for "large time gap" (1 day)'''
     timezone = pendulum.timezone(tz_input)
-    start_default = pendulum.today(timezone).subtract(days=2)
-    end_default = pendulum.today(timezone).subtract(days=1)
+    start_default = pendulum.today(timezone).subtract(days=3)
+    end_default = pendulum.today(timezone).subtract(days=2)
 
     return (start_default, end_default)
 
