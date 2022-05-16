@@ -3,7 +3,8 @@ from pytz import timezone
 from prefect import task
 import pandas as pd
 import numpy as np
-import os
+import pendulum
+# import os
 
 from .constants import interactions, columns
 from . import utils
@@ -52,8 +53,7 @@ def clean_data(thisdata):
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
-    Returns a dataframe with the number of rows the number of time units (= precision).
-    Precision in seconds.
+    Returns a dataframe with the number of rows the number of time units (= precision in seconds).
     USE LOCAL TIME to extract the correct date (include timezone)
     '''
     if not prevtime:
@@ -173,8 +173,8 @@ def extract_usage(dataframe,precision=3600):
                 if app == olderapp:
                     continue
                 # dict of the ONE app immediately preceding the "open" one.
-                # Foregrd time = timestamp of the app after it = timestamp of when it became not in the foreground
-                # Backgrd time = its own timestamp = time when it went to foreground (aka was "unbackgrounded")
+                # fg_time = timestamp of the app after it = timestamp of when it became not in the foreground
+                # unbgd_time = its own timestamp = time when it went to foreground (aka was "unbackgrounded")
                 if appdata['open'] == True and appdata['time'] < curtime:
                     latest_unbackgrounded = {'unbgd_app':olderapp, 'fg_time':curtime, 'unbgd_time':appdata['time']}
                     openapps[olderapp]['open'] = False
@@ -182,7 +182,7 @@ def extract_usage(dataframe,precision=3600):
         # if it's an app in the background
         if interaction == 'Move to Background':
 
-            # ONLY treats the one latest unbackgrounded app.
+            # ONLY applies to the one latest unbackgrounded app.
             if latest_unbackgrounded and app == latest_unbackgrounded['unbgd_app']:
                 timediff = curtime - latest_unbackgrounded['fg_time']
                 
@@ -204,10 +204,16 @@ def extract_usage(dataframe,precision=3600):
             # ONLY the one open app.
             if app in openapps.keys() and openapps[app]['open']==True:
 
-                # get time of opening - the raw data timestamp
+                # get time it was opened - the raw data timestamp
                 prevtime = openapps[app]['time']
 
-                if curtime-prevtime<timedelta(0):
+                # If the start/end of app usage is in different timezones, convert to the end timezone
+                # it they are the same, this changes nothing.
+                cur_tzname = curtime.tzinfo.zone
+                prevtime = prevtime.astimezone(cur_tzname)
+
+                # Make timediff check in UTC in case the timezones differ
+                if pendulum.instance(curtime).in_timezone('UTC')-pendulum.instance(prevtime).in_timezone('UTC')<timedelta(0):
                     raise ValueError("ALARM ALARM: timepoints out of order !!")
 
                 # split up timepoints by precision

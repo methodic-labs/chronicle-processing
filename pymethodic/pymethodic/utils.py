@@ -14,7 +14,7 @@ def logger(message, level=1):
 
 def get_dt(row):
     '''
-    Transforms the reported datetime to a timestamp, IN LOCAL TIME.
+    Transforms the reported datetime to a timestamp, IN LOCAL TIME based on the reported timezone in the row.
     A few notes:
     - Time is rounded to 10 milliseconds, to make sure the apps are in the right order.
       A potential downside of this is that when a person closes and re-opens an app
@@ -28,6 +28,25 @@ def get_dt(row):
         return localtime
     if (type(row['app_date_logged']) is datetime) or (type(row['app_date_logged']) is pd.Timestamp):
         localtime = row[columns.raw_date_logged].astimezone(pytz.timezone(row[columns.timezone]))
+        return localtime
+
+def match_systemtime(row):
+    '''
+    Transforms the reported datetime to a timestamp, IN TIME OF THE SYSTEM.
+    For checking for overlaps of already-processed data before writing in.
+    - converted to system time and then stripped of timezone, needed for accurate comparison (especially
+    if system time isn't UTC, like in local testing)
+    '''
+    if type(row['app_datetime_start']) is str:
+        zulutime = dateutil.parser.parse(row['app_datetime_start'])
+        localtime = zulutime.replace(tzinfo=timezone.utc).astimezone(tz=pytz.timezone('UTC')) #the system timezone
+        localtime = localtime.replace(tzinfo=None)
+        microsecond = min(round(localtime.microsecond / 10000)*10000, 990000)
+        localtime = localtime.replace(microsecond = microsecond)
+        return localtime
+    if (type(row['app_datetime_start']) is datetime) or (type(row['app_datetime_start']) is pd.Timestamp):
+        localtime = row['app_datetime_start'].astimezone(pytz.timezone('UTC')) #the system timezone
+        localtime = localtime.replace(tzinfo=None)
         return localtime
 
 def get_action(row):

@@ -9,7 +9,7 @@ import psycopg2
 import pendulum
 import time
 
-# from pymethodic import utils as ut
+from pymethodic.pymethodic import utils as ut
 # from pymethodic import preprocessing
 import chronicle_process_functions
 
@@ -118,7 +118,7 @@ def search_timebin(
         first_count = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
                                         counting=True, users=participants, studies=studies)
         count_of_data = first_count
-        print(f"Endtime is now {endtime_chunk}, count is {count_of_data}.")
+        # print(f"Endtime is now {endtime_chunk}, count is {count_of_data}.")
 
         # But stop relooping after 1 day even if few data, move on.
         if count_of_data < 1000 and time_interval < 1440:
@@ -164,7 +164,7 @@ def search_timebin(
 
 # TRANSFORM
 @task(log_stdout=True)
-def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_input="UTC", days_back=5):
+def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_input="UTC"):
     ''' rawdatatable: pandas dataframe passed in from the search_timebin function.'''
     if rawdatatable.shape[0] == 0:
         print("No found app usages :-\ ...")
@@ -209,12 +209,12 @@ def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_inp
             run_id = pendulum.now().strftime('%Y-%m%d-%H%M%S-') + str(uuid4())
             preprocessed_data.insert(0, 'run_id', run_id)
             print("#######################################################################")
-            print(f"## Finish preprocessing, with {preprocessed_data.shape[0]} total rows! ##")
+            print(f"## Finished preprocessing, with {preprocessed_data.shape[0]} total rows! ##")
             print("#######################################################################")
 
 
     print("#---------------------------------------------#")
-    print("Pipeline finished successfully !")
+    print("Data preprocessed!")
     return preprocessed_data
 
 
@@ -232,21 +232,17 @@ def export_csv(data, filepath, filename):
 
 # WRITE - REDSHIFT
 @task
-def query_export_table(start, end, timezone, counting=True, users=[], studies=[]):
-    '''Helper function - constructs the query on the usage exports table - to count and also to delete data.
-    users = optional people to select for, input as ['participant_id1', 'participant_id2']
-    studies = optional studies to select for, input as ['study_id1', 'study_id2']
-'''
+def query_export_table(start, end, timezone, users=[], studies=[]):
+    '''Helper function -  SQL query on the usage exports table
+    '''
+    # Timestamp must be converted to the timezone of the production db (which is UTC) for proper comparison
     timezone_of_data = timezone
 
-    # Timestamp must be converted to the timezone of the production db (which is UTC) for proper comparison
-    start_utc = pendulum.parse(start, tz=timezone_of_data).in_tz('UTC')
+    start_utc = pendulum.parse(start, tz=timezone_of_data).in_tz('UTC') #must be timezone of the system
     end_utc = pendulum.parse(end, tz=timezone_of_data).in_tz('UTC')
 
-    selection = "SELECT count(*)" if counting else "DELETE"
-
     if len(users) > 0:
-        person_filter = f''' and \"participant_id\" IN ({', '.join(f"'{u}'" for u in users)})'''
+        person_filter = f''' and \"participant_id\" = \'{users}\''''
     else:
         person_filter = ""
     if len(studies) > 0:
@@ -254,36 +250,76 @@ def query_export_table(start, end, timezone, counting=True, users=[], studies=[]
     else:
         study_filter = ""
 
-    data_query = f'''{selection} from preprocessed_usage_events
-        WHERE "app_datetime_start" between '{start_utc}' and '{end_utc}' 
-        {person_filter}{study_filter};'''
+    data_query = f'''SELECT * from preprocessed_usage_events
+            WHERE "app_datetime_start" between '{start_utc}' and '{end_utc}' 
+            {person_filter}{study_filter};'''
 
     return data_query
 
 @task(log_stdout=True)
 def write_preprocessed_data(dataset, conn, retries=3):
-    # get rid of python NaTs for empty timestamps
     if isinstance(dataset, pd.DataFrame):
-        dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds']] = \
-            dataset[['app_datetime_start', 'app_datetime_end', 'app_duration_seconds']] \
+        dataset = dataset.drop(['run_id'], axis=1) # TEMPORARY: DROPPING UNTIL TABLE IS ALTERED
+        dataset['startdate_tzaware'] = str(pendulum.now())  # TEMPORARY: dummy datetime needed until we delete this column
+        # get rid of python NaTs for empty timestamps
+        dataset[['app_datetime_end', 'app_duration_seconds']] = \
+            dataset[['app_datetime_end', 'app_duration_seconds']] \
                 .replace({np.NaN: None})
 
-    start_range = str(min(dataset['app_datetime_start']))
-    end_range = str(max(dataset['app_datetime_start']))
-    participants = [dataset['participant_id'].unique()[0]]
-    studies = [dataset['study_id'].unique()[0]]
-    timezone = dataset['app_timezone'].unique()[0]
-
+    participants = dataset['participant_id'].unique().tolist()
     tries = retries
     cursor = conn.cursor()
+    final_no_overlaps = []
 
-    # Check for existing overlapping processed data
+    # Check for existing overlapping processed data - must be done by participant as the timezone may vary by person
+    # to accurately query the table containing preprocessed data on the backend
     for i in range(tries):
         try:
-            older_data_q = query_export_table(start_range, end_range, timezone, counting=True,
-                                              users=participants,
-                                              studies=studies)
-            cursor.execute(older_data_q)
+            for p in participants:
+                df = dataset.loc[dataset['participant_id'] == p]
+                start_range = str(min(df['app_datetime_start']))
+                end_range = str(max(df['app_datetime_start']))
+                timezone = df['app_timezone'].unique()[0]
+                studies = df['study_id'].unique().tolist()
+
+                older_data_q = query_export_table.run(start_range, end_range, timezone,
+                                                  users=p,
+                                                  studies=studies)
+                # print(f"Query to check for older data for participant {p}: {older_data_q}")
+                cursor.execute(older_data_q)
+                conn.commit()
+                older_data = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
+                older_data_count = older_data.shape[0]  # Number of rows of older data found
+
+                if older_data_count == 0:
+                    final_no_overlaps.append(df)
+                elif older_data_count > 0:
+                    print(
+                        f'''Found {older_data_count} rows overlapping in time range for person {p}. Dropping from current preprocessing data before proceeding.''')
+
+                    # Drop rows of the same study, participants, app fullnames, and start datetimes
+                    df['app_datetime_start_clean'] = df.apply(ut.match_systemtime, axis=1)
+                    older_data.rename(
+                        columns={'weekdaymf': 'weekdayMF', 'weekdaymth': 'weekdayMTh', 'weekdaysth': 'weekdaySTh'},
+                        inplace=True)
+                    older_data=older_data.astype({'app_datetime_start': 'datetime64[ns]'})
+                    no_overlaps = pd.merge(df, older_data, how='outer',
+                                           indicator=True,
+                                           left_on=['study_id', 'participant_id', 'app_full_name',
+                                                    'app_datetime_start_clean'],
+                                           right_on=['study_id', 'participant_id', 'app_full_name',
+                                                     'app_datetime_start']).query('_merge == "left_only"')
+
+                    no_overlaps.drop(no_overlaps.filter(regex='_merge|_y|_clean').columns, axis=1, inplace=True)
+                    no_overlaps.columns = no_overlaps.columns.str.rstrip('_x')
+                    print(f"\n There are now {no_overlaps.shape[0]} rows of preprocessed data for person {p}.")
+
+                    if no_overlaps.shape[0] == 0:
+                        print(
+                            f'''\n Preprocessed data already exists for participant {p}, apps and time ranges currently input. \n''')
+                        continue
+
+                    final_no_overlaps.append(no_overlaps)
         except Exception as e:
             if i < tries - 1:  # i is zero indexed
                 print(e)
@@ -296,50 +332,27 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 raise
         break
 
-    conn.commit()
-    older_data = cursor.fetchall()[0][0]  # Number of rows of older data found
-
-    for i in range(tries):
-        try:
-            # Delete old data if needed
-            if older_data > 0:
-                print(f"Found {older_data} rows overlapping in time range for this study. Dropping before proceeding.")
-
-                # Only executed if needed
-                drop_query = query_export_table(start_range, end_range, timezone,
-                                                counting=False,
-                                                users=participants,
-                                                studies=studies)
-                cursor.execute(drop_query)
-                print(f"Dropped {cursor.rowcount} rows of older preprocessed data.")
-
-            # Insert new data
-            # run_id, and another %s must be added later
-            dataset2 = dataset.to_numpy()
-            args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s)", x) for x in
-                                 tuple(map(tuple, dataset2)))
-            write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
+        # Insert any new data
+    if not final_no_overlaps or all(x is None for x in final_no_overlaps):
+        print(f"No new preprocessed data found in this date range")
+        pass
+    elif len(final_no_overlaps) > 0:
+        final_no_overlaps = pd.concat(final_no_overlaps)
+        # run_id, and another %s must be added later
+        dataset2 = final_no_overlaps.to_numpy()
+        args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
+                             tuple(map(tuple, dataset2)))
+        write_new_query = "INSERT INTO preprocessed_usage_events (study_id, participant_id, \
             app_record_type, app_title, app_full_name,\
             app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
            day, weekdayMF, weekdayMTh, weekdaySTh, \
-           app_engage_30s, app_switched_app, app_usage_flags) VALUES" + args_str.decode("utf-8")
-            cursor.execute(write_new_query)
-        except Exception as e:
-            print(e)
-            if i < tries - 1:  # i is zero indexed
-                print("Rolling back and retrying...")
-                cursor.execute("ROLLBACK")
-                conn.commit()
-                time.sleep(30)
-                continue
-            else:
-                raise
-        break
+           app_engage_30s, app_switched_app, app_usage_flags, startdate_tzaware) VALUES" + args_str.decode("utf-8")
+        cursor.execute(write_new_query)
+        print(
+            f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
 
     conn.commit()  # DOESN'T HAPPEN UNTIL THE COMMIT
     print("#-----------------------------------------------#")
-    print(
-        f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
     print("Preprocessing pipeline finished!")
     print("#-----------------------------------------------#")
 
@@ -363,9 +376,9 @@ def main():
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
         participants = Parameter("participants", default=[]) #"Specific participant(s) candidate_id.", required=False
         studies = Parameter("studies", default=[]) #"Specific study/studies.", required=False
-        daysback = Parameter("daysback", default=5) #"For daily processor, the number of days back.", required=False
+        # daysback = Parameter("daysback", default=5) #"For daily processor, the number of days back.", required=False
         tz_input = Parameter("timezone", default = "UTC")
-        export_format = Parameter("export_format", default="csv")
+        export_format = Parameter("export_format", default="")
         filepath = Parameter("filepath", default="")
         filename = Parameter("filename", default="")
         dbuser = Parameter("dbuser", default="datascience") # "Username to source database
@@ -380,18 +393,13 @@ def main():
         raw = search_timebin(startdatetime, enddatetime, tz_input, engine, participants, studies)
 
         # Transform:
-        processed = chronicle_process(raw, startdatetime, enddatetime, tz_input, daysback)
+        processed = chronicle_process(raw, startdatetime, enddatetime, tz_input)
 
         # Write out:
         conn = connect(dbuser, password, hostname, port, type="psycopg2")
         print("Connection to export table successful!")
 
         how_export(processed, filepath, filename, conn, format = export_format)
-        # exporting = how_export.run(export_format)
-        # print(str(exporting))
-        # if exporting == "csv":
-        #     export_csv(processed, filepath=filepath, filename=filename)
-        # write_preprocessed_data(processed, conn)
 
     flow.register(project_name="Preprocessing")
 

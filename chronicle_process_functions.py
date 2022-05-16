@@ -139,10 +139,10 @@ def get_person_preprocessed_data(
     column_replacement = es.column_rename
     df = df.rename(columns=column_replacement)
 
-    timezone = df['app_timezone'].unique()[0]
-    if len(df['app_timezone'].unique()) > 1:
-        ut.logger.run(f"Person with ID {person} has data in > 1 timezone! Investigate manually.")
-        pass
+    # timezone = df['app_timezone'].unique()[0]
+    # if len(df['app_timezone'].unique()) > 1:
+    #     ut.logger.run(f"Person with ID {person} has data in > 1 timezone! Investigate manually.")
+    #     pass
 
     ####----------- Why are we renaming columns? Skipping for now.
     ## ...also seems redundant with 1st step in preprocess_dataframe
@@ -157,13 +157,13 @@ def get_person_preprocessed_data(
     #     }
     # else:
 
-    # subset the data for daily processing, only batches of 5 days at a time
-    if startdatetime is not None:
-        startdatetime = str(startdatetime)
-        startdatetime = pendulum.parse(startdatetime, tz=timezone)
-        if enddatetime is not None:
-            enddatetime = str(enddatetime)
-            enddatetime = pendulum.parse(enddatetime, tz=timezone)
+    # This was to correctly subset the data by the "days back", which we're not using anymore.
+    # if startdatetime is not None:
+    #     startdatetime = str(startdatetime)
+    #     startdatetime = pendulum.parse(startdatetime, tz=timezone)
+    #     if enddatetime is not None:
+    #         enddatetime = str(enddatetime)
+    #         enddatetime = pendulum.parse(enddatetime, tz=timezone)
 
         # #-------- MOVE TO SEARCH_TIMEBIN
         # # current delta time set to 5 days, though that can totally be subject of change :)
