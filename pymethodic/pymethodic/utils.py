@@ -14,7 +14,7 @@ def logger(message, level=1):
 
 def get_dt(row):
     '''
-    Transforms the reported datetime to a timestamp, IN LOCAL TIME.
+    Transforms the reported datetime to a timestamp, IN LOCAL TIME based on the reported timezone in the row.
     A few notes:
     - Time is rounded to 10 milliseconds, to make sure the apps are in the right order.
       A potential downside of this is that when a person closes and re-opens an app
@@ -29,6 +29,7 @@ def get_dt(row):
     if (type(row['app_date_logged']) is datetime) or (type(row['app_date_logged']) is pd.Timestamp):
         localtime = row[columns.raw_date_logged].astimezone(pytz.timezone(row[columns.timezone]))
         return localtime
+
 
 def get_action(row):
     '''

@@ -1,26 +1,34 @@
 from datetime import datetime, timedelta, timezone
-from .constants import columns, interactions
-from collections import Counter
+from .constants import columns
+from prefect import task
 import dateutil.parser
 import pandas as pd
 import numpy as np
 import pytz
-import os
-import re
+
+@task
+def logger(message, level=1):
+    time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
+    print("%s %s: %s"%(prefix,time,message))
 
 def get_dt(row):
     '''
-    This function transforms the reported (string) datetime to a timestamp.
+    Transforms the reported datetime to a timestamp, IN LOCAL TIME.
     A few notes:
     - Time is rounded to 10 milliseconds, to make sure the apps are in the right order.
       A potential downside of this is that when a person closes and re-opens an app
       within 10 milliseconds, it will be regarded as closed.
-    '''    
-    zulutime = dateutil.parser.parse(row[columns.raw_date_logged])
-    localtime = zulutime.replace(tzinfo=timezone.utc).astimezone(tz=pytz.timezone(row[columns.timezone]))
-    # microsecond = min(round(localtime.microsecond / 10000)*10000, 990000)
-    # localtime = localtime.replace(microsecond = microsecond)
-    return localtime
+    '''
+    if type(row['app_date_logged']) is str:
+        zulutime = dateutil.parser.parse(row[columns.raw_date_logged])
+        localtime = zulutime.replace(tzinfo=timezone.utc).astimezone(tz=pytz.timezone(row[columns.timezone]))
+        # microsecond = min(round(localtime.microsecond / 10000)*10000, 990000)
+        # localtime = localtime.replace(microsecond = microsecond)
+        return localtime
+    if (type(row['app_date_logged']) is datetime) or (type(row['app_date_logged']) is pd.Timestamp):
+        localtime = row[columns.raw_date_logged].astimezone(pytz.timezone(row[columns.timezone]))
+        return localtime
 
 def get_action(row):
     '''
@@ -32,6 +40,7 @@ def get_action(row):
     if row[columns.raw_record_type]== 'Move to Background':
         return 1
 
+@task
 def recode(row,recode):
     newcols = {x:None for x in recode.columns}
     if row[columns.full_name] in recode.index:
@@ -40,11 +49,7 @@ def recode(row,recode):
 
     return pd.Series(newcols)
 
-def logger(message,level=1):
-    time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
-    print("%s %s: %s"%(prefix,time,message))
-
+@task
 def fill_dates(dataset,datelist):
     '''
     This function checks for empty days and fills them with 0's.
@@ -55,7 +60,7 @@ def fill_dates(dataset,datelist):
             dataset = dataset.append(newrow)
     return dataset
 
-
+@task
 def fill_hours(dataset,datelist):
     '''
     This function checks for empty days/hours and fills them with 0's.
@@ -69,6 +74,7 @@ def fill_hours(dataset,datelist):
                 dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_quarters(dataset,datelist):
     '''
     This function checks for empty days/hours/quarters and fills them with 0's.
@@ -83,6 +89,7 @@ def fill_quarters(dataset,datelist):
                     dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_appcat_hourly(dataset,datelist,catlist):
     '''
     This function checks for empty days/hours and fills them with 0's for all categories.
@@ -97,6 +104,7 @@ def fill_appcat_hourly(dataset,datelist,catlist):
                     dataset = dataset.append(newrow)
     return dataset
 
+@task
 def fill_appcat_quarterly(dataset,datelist,catlist):
     '''
     This function checks for empty days/hours/quarters and fills them with 0's for all categories.
@@ -112,7 +120,7 @@ def fill_appcat_quarterly(dataset,datelist,catlist):
                         dataset = dataset.append(newrow)
     return dataset
 
-
+@task
 def cut_first_last(dataset, includestartend, maxdays, first, last):
     first_parsed = dateutil.parser.parse(str(first))
     last_parsed = dateutil.parser.parse(str(last))
@@ -153,6 +161,7 @@ def cut_first_last(dataset, includestartend, maxdays, first, last):
             
     return dataset, datelist
 
+@task
 def add_session_durations(dataset):
     engagecols = [x for x in dataset.columns if x.startswith('engage')]
     for sescol in engagecols:
@@ -170,6 +179,7 @@ def add_session_durations(dataset):
             dataset.loc[np.arange(lower,upper),newcol] = durs[idx]
     return dataset
 
+@task
 def backwards_compatibility(dataframe):
     dataframe = dataframe.rename(
         columns = {
@@ -191,11 +201,11 @@ def backwards_compatibility(dataframe):
     )
     return dataframe
 
+@task
 def round_down_to_quarter(x):
     if pd.isna(x):
         return None
     return int(np.floor(x.minute / 15.)) + 1
-
 
 def combine_flags(row):
     flags = []
@@ -205,12 +215,12 @@ def combine_flags(row):
         flags.append("LONG APP DURATION")
     return flags
 
-
+@task
 def add_warnings(df):
     df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \
                      timedelta(days=1)
-    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60
+    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #3 hrs
     df[columns.flags] = df.apply(combine_flags, axis=1)
     df = df.drop(['no_usage', 'long_usage'], axis=1)
     return df
