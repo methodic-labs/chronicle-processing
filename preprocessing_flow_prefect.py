@@ -289,7 +289,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                                                       counting=True,
                                                       users=p,
                                                       studies=studies)
-                print(f"Query to check for older data for participant {p}: {older_data_q}")
+                # print(f"Query to check for older data for participant {p}: {older_data_q}")
                 cursor.execute(older_data_q)
                 conn.commit()
                 older_data_count = cursor.fetchall()[0][0]  # Number of rows of older data found
@@ -320,7 +320,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 raise
         break
 
-        # Insert any new data
+        # Insert new data
     if not final_data or all(x is None for x in final_data):
         print(f"No new preprocessed data found in this date range")
         pass
