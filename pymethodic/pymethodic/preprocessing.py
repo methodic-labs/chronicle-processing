@@ -358,49 +358,4 @@ def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
     return data_fordownload
     
     
-# def preprocess_folder(infolder,outfolder,precision=3600,sessioninterval = [5*60], logdir=None, logopts={}):
-#
-#     if not os.path.exists(outfolder):
-#         os.mkdir(outfolder)
-#
-#     for filename in [x for x in os.listdir(infolder) if x.startswith("Chronicle")]:
-#         utils.logger("LOG: Preprocessing file %s..."%filename,level=1)
-#         dataframe = read_data(os.path.join(infolder,filename))
-#         data = preprocess_dataframe(dataframe, precision=precision,sessioninterval = sessioninterval, logdir=logdir, logopts=logopts)
-#         if data is not None:
-#             outfilename = filename.replace('ChronicleData','ChronicleData_preprocessed')
-#             data.to_csv(os.path.join(outfolder,outfilename),index=False)
-
-# def add_preprocessed_columns(data):
-#     if data.shape[0] == 0:
-#         return data
-#     data[columns.prep_datetime_start] = data[columns.prep_datetime_start].astype(str).replace('nan', )
-#     data[columns.prep_datetime_end] = data[columns.prep_datetime_end].astype(str).replace('nan',None)
-#
-#     data[columns.prep_datetime_start] = pd.to_datetime(data[columns.prep_datetime_start].replace('nan', ''), infer_datetime_format = True, utc = True)
-#     data[columns.prep_datetime_end] = pd.to_datetime(data[columns.prep_datetime_end].replace('nan', ''), infer_datetime_format = True, utc = True)
-#     data['duration_minutes'] = data.apply(lambda x: x[columns.prep_duration_seconds] / 60., axis = 1)
-#     data['firstdate'] = min(data[columns.prep_datetime_start]).date()
-#     data['lastdate'] = max(data[columns.prep_datetime_end][~data[columns.prep_datetime_end].isna()]).date()
-#     data['date'] = data.apply(lambda x: x[columns.prep_datetime_start].date(), axis =1)
-#     data[columns.prep_datetime_start] = data.apply(lambda x: x[columns.prep_datetime_start], axis = 1)
-#     data[columns.prep_datetime_end] = data.apply(lambda x: x[columns.prep_datetime_end], axis = 1)
-#     data["day"] = data.apply(lambda x: (x[columns.prep_datetime_start].weekday() + 1) % 7 + 1, axis = 1)
-#     data["weekdayMF"] = data.apply(lambda x: 1 if x[columns.prep_datetime_start].weekday() < 5 else 0, axis = 1)
-#     data["weekdayMTh"] = data.apply(lambda x: 1 if x[columns.prep_datetime_start].weekday() < 4 else 0, axis = 1)
-#     data["weekdaySTh"] = data.apply(lambda x: 1 if (x[columns.prep_datetime_start].weekday() < 4 or x[columns.prep_datetime_start].weekday() == 6) else 0, axis = 1)
-#     data["hour"] = data.apply(lambda x: x[columns.prep_datetime_start].hour, axis = 1)
-#     data["quarter"] = data.apply(lambda x: utils.round_down_to_quarter(x[columns.prep_datetime_start]), axis = 1)
-#     data = utils.add_session_durations(data)
-#     return data
-# #
-# #     if 'log_exceed_durations_minutes' in logopts.keys():
-# #         if not os.path.exists(logdir):
-# #             os.mkdir(logdir)
-# #         for threshold in logopts['log_exceed_durations_minutes']:
-# #             subset = data[data.duration_minutes > float(threshold)]
-# #             outfile = os.path.join(logdir, "log_exceed_durations_minutes_%s.txt" % threshold)
-# #             if len(subset) > 0:
-# #                 for idx, row in data[data.duration_minutes > threshold].iterrows():
-# #                     log_exceed_durations_minutes(row, threshold, outfile)
 
