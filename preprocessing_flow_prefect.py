@@ -1,5 +1,9 @@
 from prefect.tasks.secrets import PrefectSecret
 from prefect import task, Flow, Parameter, context
+# from prefect.environments.storage import Docker
+from prefect.run_configs import DockerRun
+from prefect.agent.local import LocalAgent
+from prefect.storage import GitHub
 from datetime import timedelta
 import sqlalchemy as sq
 from uuid import uuid4
@@ -16,6 +20,8 @@ import chronicle_process_functions
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
 # Timezone is UTC by default, but can be changed with an input arg
 # TIMEZONE = pendulum.timezone("UTC")
+
+# LocalAgent().start()
 
 @task(checkpoint=False)
 def connect(dbuser, password, hostname, port, type="sqlalchemy"):
@@ -389,6 +395,15 @@ def main():
 
         how_export(processed, filepath, filename, conn, format = export_format)
 
+    flow.run_config=DockerRun(dockerfile="preprocess:1.0")
+    flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
+
+    # Configure extra environment variables for this flow,
+    # and set a custom image
+    # flow.run_config = DockerRun(
+    #     env={"SOME_VAR": "VALUE"},
+    #     image="example/image-name:with-tag"
+    # )
     flow.register(project_name="Preprocessing")
 
 if __name__ == '__main__':
