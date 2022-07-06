@@ -1,6 +1,7 @@
 from prefect.tasks.secrets import PrefectSecret
+from prefect.tasks.docker.images import PullImage
 from prefect import task, Flow, Parameter, context
-from prefect.environments.storage import Docker
+# from prefect.environments.storage import Docker
 from prefect.run_configs import DockerRun
 from prefect.agent.local import LocalAgent
 from prefect.storage import GitHub
