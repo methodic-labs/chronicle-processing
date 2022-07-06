@@ -367,7 +367,7 @@ def main():
     # builds the DAG
     with Flow("preprocessing_daily",
               storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
-              run_config=DockerRun(image="chronicle-processing:test")) as flow:
+              run_config=DockerRun(image="methodiclabs/chronicle-processing:test")) as flow:
         PullImage()('gcr.io/ghpr-mgmt/flow')
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
