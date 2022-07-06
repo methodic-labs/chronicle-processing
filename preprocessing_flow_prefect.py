@@ -1,6 +1,6 @@
 from prefect.tasks.secrets import PrefectSecret
 from prefect import task, Flow, Parameter, context
-# from prefect.environments.storage import Docker
+from prefect.environments.storage import Docker
 from prefect.run_configs import DockerRun
 from prefect.agent.local import LocalAgent
 from prefect.storage import GitHub
@@ -21,7 +21,7 @@ import chronicle_process_functions
 # Timezone is UTC by default, but can be changed with an input arg
 # TIMEZONE = pendulum.timezone("UTC")
 
-# LocalAgent().start()
+# LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
 
 @task(checkpoint=False)
 def connect(dbuser, password, hostname, port, type="sqlalchemy"):
@@ -364,7 +364,10 @@ def main():
     end_default = str(daily_range[1])
 
     # builds the DAG
-    with Flow("preprocessing_daily") as flow:
+    with Flow("preprocessing_daily",
+              storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
+              run_config=DockerRun(image="chronicle-processing:test")) as flow:
+        PullImage()('gcr.io/ghpr-mgmt/flow')
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
@@ -395,15 +398,10 @@ def main():
 
         how_export(processed, filepath, filename, conn, format = export_format)
 
-    flow.run_config=DockerRun(dockerfile="preprocess:1.0")
-    flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
+    # Use Docker and set a custom image
+    # flow.run_config=DockerRun(image="methodiclabs/chronicle-processing:test")
+    # flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
 
-    # Configure extra environment variables for this flow,
-    # and set a custom image
-    # flow.run_config = DockerRun(
-    #     env={"SOME_VAR": "VALUE"},
-    #     image="example/image-name:with-tag"
-    # )
     flow.register(project_name="Preprocessing")
 
 if __name__ == '__main__':

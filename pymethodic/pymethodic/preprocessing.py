@@ -184,7 +184,8 @@ def extract_usage(dataframe,precision=3600):
 
             # ONLY applies to the one latest unbackgrounded app.
             if latest_unbackgrounded and app == latest_unbackgrounded['unbgd_app']:
-                timediff = curtime - latest_unbackgrounded['fg_time']
+                # Make timediff check in UTC in case the timezones differ
+                timediff = pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(latest_unbackgrounded['fg_time']).in_timezone('UTC')
                 
                 if timediff < timedelta(seconds=1):
 
