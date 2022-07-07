@@ -7,5 +7,5 @@ FROM prefecthq/prefect:1.1.0
 RUN apt-get update && apt-get install -y libpq-dev
 RUN pip install pandas numpy uuid pendulum SQLAlchemy prefect psycopg2
 
-RUN git clone https://www.github.com/methodic-labs/chronicle-processing
+#RUN git clone https://www.github.com/methodic-labs/chronicle-processing
 RUN pip install ./chronicle-processing/pymethodic/
