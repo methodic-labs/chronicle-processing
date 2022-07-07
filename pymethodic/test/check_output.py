@@ -1,4 +1,4 @@
-from pymethodic.pymethodic import summarising, preprocessing, subsetting
+from pymethodic import summarising, preprocessing, subsetting
 from argparse import ArgumentParser
 import pandas as pd
 import unittest

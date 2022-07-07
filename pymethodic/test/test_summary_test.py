@@ -1,4 +1,4 @@
-from pymethodic.pymethodic import summarising, preprocessing, subsetting
+from pymethodic import summarising, preprocessing, subsetting
 import unittest
 
 class PreprocessingTest(unittest.TestCase):
