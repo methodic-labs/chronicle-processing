@@ -19,7 +19,7 @@ import pymethodic
 #import pymethodic.utils as ut
 #from pymethodic import preprocessing
 import sys
-#sys.path.insert(1,'./chronicle-processing')
+sys.path.insert(1,'/chronicle-processing')
 import chronicle_process_functions
 
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
