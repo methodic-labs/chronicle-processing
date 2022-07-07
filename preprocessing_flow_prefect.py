@@ -279,7 +279,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset[['app_datetime_end', 'app_duration_seconds']] = \
             dataset[['app_datetime_end', 'app_duration_seconds']] \
                 .replace({np.NaN: None})
-    print(dataset)
+                
     participants = dataset['participant_id'].unique().tolist()
     tries = retries
     cursor = conn.cursor()
@@ -357,6 +357,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
 
 @task(log_stdout=True)
 def how_export(data, filepath, filename, conn, format="csv"):
+    print(data)
     if format=="csv":
         export_csv.run(data, filepath=filepath, filename=filename)
     else:
