@@ -15,9 +15,6 @@ import pendulum
 import time
 
 import prefect
-#import logging
-#logging.basicConfig(level=logging.INFO)
-#logger = logging.getLogger(__name__)
 
 from pymethodic import utils as ut
 import pymethodic
@@ -390,9 +387,7 @@ def main():
     tflow.register(project_name="tutorial")
     
     # builds the DAG
-    with Flow("preprocessing_daily",
-              storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
-              run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
+    with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
         wtf()
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
