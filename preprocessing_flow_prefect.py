@@ -14,7 +14,7 @@ import psycopg2
 import pendulum
 import time
 
-from pymethodic.pymethodic import utils as ut
+from pymethodic import utils as ut
 # from pymethodic import preprocessing
 import chronicle_process_functions
 
