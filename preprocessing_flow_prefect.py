@@ -14,8 +14,7 @@ import psycopg2
 import pendulum
 import time
 
-#from pymethodic 
-import pymethodic.utils as ut
+from pymethodic import utils as ut
 import pymethodic
 #from pymethodic import preprocessing
 import sys
@@ -362,6 +361,9 @@ def how_export(data, filepath, filename, conn, format="csv"):
     else:
         write_preprocessed_data.run(data, conn)
 
+@task(log_stdout=True)
+def wtf():
+    print("wtf")
 
 def main():
     daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
@@ -373,6 +375,7 @@ def main():
               storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
               run_config=DockerRun(image="methodiclabs/chronicle-processing")
               ) as flow:
+        wtf()
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
