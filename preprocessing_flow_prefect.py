@@ -372,9 +372,8 @@ def say_hello():
     logger = prefect.context.get("logger")
     logger.info("Hello, Cloud!")
 
-with Flow("hello-flow") as flow:
-    say_hello()
-
+#with Flow("hello-flow") as flow:
+#    say_hello()
 
 def main():
     daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
