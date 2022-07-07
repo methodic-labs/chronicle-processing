@@ -16,7 +16,9 @@ import time
 
 from pymethodic import utils as ut
 # from pymethodic import preprocessing
-import pymethodic.chronicle_process_functions
+import sys
+sys.path.insert('./pymethodic/')
+import chronicle_process_functions
 
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
 # Timezone is UTC by default, but can be changed with an input arg
