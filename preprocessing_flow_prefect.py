@@ -372,16 +372,16 @@ def say_hello():
     logger = prefect.context.get("logger")
     logger.info("Hello, Cloud!")
 
-#with Flow("hello-flow") as flow:
-#    say_hello()
 
-def main():
-    daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
-    start_default = str(daily_range[0])
-    end_default = str(daily_range[1])
-    
-    # builds the DAG
-    with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
+with Flow("hello-flow") as tflow:
+    say_hello()
+
+daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
+start_default = str(daily_range[0])
+end_default = str(daily_range[1])
+
+# builds the DAG
+with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
         wtf()
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
@@ -412,6 +412,8 @@ def main():
         print("Connection to export table successful!")
 
         how_export(processed, filepath, filename, conn, format = export_format)
+
+def main():
 
     # Use Docker and set a custom image
     # flow.run_config=DockerRun(image="methodiclabs/chronicle-processing:test")
