@@ -411,6 +411,7 @@ def main():
     # flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
 
     flow.register(project_name="Preprocessing")
+    flow.run()
 
 if __name__ == '__main__':
     main()
