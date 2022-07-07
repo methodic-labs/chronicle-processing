@@ -14,6 +14,11 @@ import psycopg2
 import pendulum
 import time
 
+import prefect
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from pymethodic import utils as ut
 import pymethodic
 #from pymethodic import preprocessing
@@ -379,10 +384,10 @@ def main():
     start_default = str(daily_range[0])
     end_default = str(daily_range[1])
         
-    with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
+    with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as tflow:
         say_hello()
     # Register the flow under the "tutorial" project
-    flow.register(project_name="tutorial")
+    tflow.register(project_name="tutorial")
     
     # builds the DAG
     with Flow("preprocessing_daily",
@@ -424,7 +429,6 @@ def main():
     # flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
 
     flow.register(project_name="Preprocessing")
-    flow.run()
 
 if __name__ == '__main__':
     main()
