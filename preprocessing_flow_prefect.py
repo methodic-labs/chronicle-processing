@@ -378,8 +378,7 @@ def main():
     daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
     start_default = str(daily_range[0])
     end_default = str(daily_range[1])
-    schedule = IntervalSchedule(interval=timedelta(minutes=2))
-    
+        
     with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
         say_hello()
     # Register the flow under the "tutorial" project
