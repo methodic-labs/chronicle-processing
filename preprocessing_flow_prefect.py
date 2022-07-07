@@ -373,7 +373,6 @@ def main():
               storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
               run_config=DockerRun(image="methodiclabs/chronicle-processing")
               ) as flow:
-        #PullImage()('methodiclabs/chronicle-processing"')
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
