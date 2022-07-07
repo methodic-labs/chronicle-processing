@@ -1,7 +1,7 @@
-from pymethodic.pymethodic import preprocessing
-from pymethodic.pymethodic import utils as ut
+from pymethodic import preprocessing
+from pymethodic import utils as ut
 # from pymethodic.constants import interactions, columns
-from pymethodic.pymethodic.constants import columns as es
+from pymethodic.constants import columns as es
 from datetime import timedelta
 from prefect import task
 # from . import utils as ut

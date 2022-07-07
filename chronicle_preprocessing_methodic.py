@@ -5,7 +5,7 @@ import pandas as pd
 import dateutil
 import pytz
 
-from pymethodic.pymethodic import utils as ut
+from pymethodic import utils as ut
 import chronicle_process_functions
 
 #------- Can process by DATE
