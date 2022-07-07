@@ -15,8 +15,8 @@ import pendulum
 import time
 
 #from pymethodic 
+import pymethodic.utils as ut
 import pymethodic
-#import pymethodic.utils as ut
 #from pymethodic import preprocessing
 import sys
 sys.path.insert(1,'/chronicle-processing')
@@ -26,7 +26,7 @@ import chronicle_process_functions
 # Timezone is UTC by default, but can be changed with an input arg
 # TIMEZONE = pendulum.timezone("UTC")
 
-# LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
+#LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
 
 @task(checkpoint=False)
 def connect(dbuser, password, hostname, port, type="sqlalchemy"):
@@ -371,8 +371,9 @@ def main():
     # builds the DAG
     with Flow("preprocessing_daily",
               storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),
-              run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
-        PullImage()('methodiclabs/chronicle-processing"')
+              run_config=DockerRun(image="methodiclabs/chronicle-processing")
+              ) as flow:
+        #PullImage()('methodiclabs/chronicle-processing"')
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
