@@ -14,7 +14,7 @@ import psycopg2
 import pendulum
 import time
 
-import prefect
+#import prefect
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
