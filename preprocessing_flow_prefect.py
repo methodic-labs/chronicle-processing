@@ -18,7 +18,6 @@ import prefect
 
 from pymethodic import utils as ut
 import pymethodic
-#from pymethodic import preprocessing
 import sys
 sys.path.insert(1,'/chronicle-processing')
 import chronicle_process_functions
@@ -363,19 +362,7 @@ def how_export(data, filepath, filename, conn, format="csv"):
     else:
         write_preprocessed_data.run(data, conn)
 
-@task(log_stdout=True)
-def wtf():
-    print("wtf")
-
-@task
-def say_hello():
-    logger = prefect.context.get("logger")
-    logger.info("Hello, Cloud!")
-
-
-with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as tflow:
-    say_hello()
-
+#This needs to happen outside of main, otherwise prefect will not detect the flow.
 daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
 start_default = str(daily_range[0])
 end_default = str(daily_range[1])
@@ -414,15 +401,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         how_export(processed, filepath, filename, conn, format = export_format)
 
 def main():
-
-    # Use Docker and set a custom image
-    # flow.run_config=DockerRun(image="methodiclabs/chronicle-processing:test")
-    # flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
-
-    # Register the flow under the "tutorial" project
-    tflow.register(project_name="tutorial")
-    
-    #Register the actual flow
+    #Register the flow when this is run as a script.
     flow.register(project_name="Preprocessing")
 
 if __name__ == '__main__':
