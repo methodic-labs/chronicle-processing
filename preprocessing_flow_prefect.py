@@ -380,11 +380,6 @@ def main():
     daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
     start_default = str(daily_range[0])
     end_default = str(daily_range[1])
-        
-    with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as tflow:
-        say_hello()
-    # Register the flow under the "tutorial" project
-    tflow.register(project_name="tutorial")
     
     # builds the DAG
     with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
@@ -423,6 +418,11 @@ def main():
     # flow.run_config=DockerRun(image="methodiclabs/chronicle-processing:test")
     # flow.storage = GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py")
 
+    with Flow("hello-flow",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as tflow:
+        say_hello()
+    # Register the flow under the "tutorial" project
+    tflow.register(project_name="tutorial")
+    
     flow.register(project_name="Preprocessing")
 
 if __name__ == '__main__':
