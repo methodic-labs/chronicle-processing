@@ -14,10 +14,10 @@ import psycopg2
 import pendulum
 import time
 
-#import prefect
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import prefect
+#import logging
+#logging.basicConfig(level=logging.INFO)
+#logger = logging.getLogger(__name__)
 
 from pymethodic import utils as ut
 import pymethodic
