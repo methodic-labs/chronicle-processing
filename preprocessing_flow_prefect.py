@@ -279,7 +279,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset[['app_datetime_end', 'app_duration_seconds']] = \
             dataset[['app_datetime_end', 'app_duration_seconds']] \
                 .replace({np.NaN: None})
-
+    print(dataset)
     participants = dataset['participant_id'].unique().tolist()
     tries = retries
     cursor = conn.cursor()
