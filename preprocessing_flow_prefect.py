@@ -133,7 +133,7 @@ def search_timebin(
 
         # But stop relooping after 1 day even if few data, move on.
         if count_of_data < 1000 and time_interval < 1440:
-            print(f"There are few data points ({count_of_data}), expanding to {time_interval * 2} minute intervals and redoing search")
+            print(f"There are few data points ({count_of_data}), expanding to {time_interval * 2} minutes and redoing search")
             refined_time = time_interval * 2
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
@@ -145,15 +145,15 @@ def search_timebin(
             time_interval = refined_time
             continue
 
-        if count_of_data > 500000:
+        while count_of_data > 1600000:
             print(
-                f"There are {count_of_data} hits for this interval, narrowing to {time_interval / 2} minute intervals and redoing search")
+                f"There are {count_of_data} hits, narrowing to {time_interval / 2} minutes and redoing search")
             refined_time = time_interval / 2
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
 
             second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
-                                             users=participants, studies=studies)
+                                                 users=participants, studies=studies)
             count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
             time_interval = refined_time
