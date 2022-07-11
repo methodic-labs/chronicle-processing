@@ -274,11 +274,10 @@ def query_export_table(start, end, timezone, counting=True, users=[], studies=[]
 def write_preprocessed_data(dataset, conn, retries=3):
     # get rid of python NaTs for empty timestamps
     if isinstance(dataset, pd.DataFrame):
-        # dataset = dataset.drop(['run_id'], axis=1) # TEMPORARY: DROPPING UNTIL TABLE IS ALTERED
-        # dataset['startdate_tzaware'] = str(pendulum.now())  # TEMPORARY: dummy datetime needed until we delete this column
         dataset[['app_datetime_end', 'app_duration_seconds']] = \
             dataset[['app_datetime_end', 'app_duration_seconds']] \
                 .replace({np.NaN: None})
+        dataset[['app_usage_flags']] = dataset[['app_usage_flags']].astype(str)
                 
     participants = dataset['participant_id'].unique().tolist()
     tries = retries
@@ -337,7 +336,6 @@ def write_preprocessed_data(dataset, conn, retries=3):
         pass
     elif len(final_data) > 0:
         final_data = pd.concat(final_data)
-        # run_id, and another %s must be added later
         dataset2 = final_data.to_numpy()
         args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                              tuple(map(tuple, dataset2)))
