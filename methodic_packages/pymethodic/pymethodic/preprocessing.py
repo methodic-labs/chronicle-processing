@@ -79,7 +79,8 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     prevtimerounded = prevtimehour+timedelta(seconds=seconds_since_prevtimehour)
 
     # number of timepoints on precision scale (= new rows )
-    timedif = (curtime-prevtimerounded)
+    # Make timedif check in UTC in case the timezones differ
+    timedif = (pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtimerounded).in_timezone('UTC'))
     timepoints_n = int(np.floor(timedif.seconds/precision)+int(timedif.days*24*60*60/precision))
 
     # run over timepoints and append datetimestamps

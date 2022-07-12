@@ -9,7 +9,6 @@ import pendulum
 from .constants import interactions, columns
 from . import utils
 
-
 @task
 def read_data(filenm):
     ''' Used in the "preprocess_folder" function.'''
@@ -17,7 +16,6 @@ def read_data(filenm):
     thisdata = pd.read_csv(filenm)
     thisdata['person'] = personid
     return thisdata
-
 
 @task
 def clean_data(thisdata):
@@ -40,20 +38,16 @@ def clean_data(thisdata):
     if not 'app_title' in thisdata.columns:
         thisdata['app_title'] = ""
     thisdata['app_title'] = thisdata['app_title'].fillna("")
-    thisdata = thisdata[
-        ['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged',
-         'app_timezone']]
+    thisdata = thisdata[['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged', 'app_timezone']]
     # fill timezone by preceding timezone and then backwards
     thisdata = thisdata.sort_values(by=['app_date_logged']). \
         reset_index(drop=True). \
         fillna(method="ffill").fillna(method="bfill")
-    thisdata['date_tzaware'] = thisdata.apply(utils.get_dt,
-                                              axis=1)  # transforms string to a timestamp, returns local time
+    thisdata['date_tzaware'] = thisdata.apply(utils.get_dt, axis=1)  # transforms string to a timestamp, returns local time
     thisdata['action'] = thisdata.apply(utils.get_action, axis=1)
     thisdata = thisdata.sort_values(by=['date_tzaware', 'action']).reset_index(drop=True)
 
     return thisdata.drop(['action'], axis=1)
-
 
 @task
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
@@ -85,7 +79,9 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     prevtimerounded = prevtimehour + timedelta(seconds=seconds_since_prevtimehour)
 
     # number of timepoints on precision scale (= new rows )
-    timedif = (curtime - prevtimerounded)
+    # Make timedif check in UTC in case the timezones differ
+    timedif = (pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtimerounded).in_timezone('UTC'))
+
     timepoints_n = int(np.floor(timedif.seconds / precision) + int(timedif.days * 24 * 60 * 60 / precision))
 
     # run over timepoints and append datetimestamps
@@ -120,7 +116,6 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
         outtime.append(outmetrics)
 
     return pd.DataFrame(outtime)
-
 
 @task
 def extract_usage(dataframe, precision=3600):
