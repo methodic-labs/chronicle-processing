@@ -104,7 +104,9 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
             "weekdaySTh": 1 if (starttime.weekday() < 4 or starttime.weekday()==6) else 0,
             "hour": starttime.hour,
             "quarter": int(np.floor(starttime.minute/15.))+1,
-            columns.prep_duration_seconds: np.round((endtime - starttime).total_seconds())
+            # Durations: convert start & end to UTC for consistency in case they're logged in diff timezones
+            columns.prep_duration_seconds: np.round((pendulum.instance(endtime).in_timezone('UTC') - pendulum.instance(
+                starttime).in_timezone('UTC')).total_seconds())
         }
 
         outmetrics['participant_id'] = row['participant_id']
