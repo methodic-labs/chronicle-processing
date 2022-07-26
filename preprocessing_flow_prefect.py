@@ -355,7 +355,9 @@ def write_preprocessed_data(dataset, conn, retries=3):
 
 @task(log_stdout=True)
 def how_export(data, filepath, filename, conn, format="csv"):
-    print(data)
+    # print(data)
+    if data is None:
+        print("No found app usages for time period. Nothing written, pipeline exiting.")
     if format=="csv":
         export_csv.run(data, filepath=filepath, filename=filename)
     else:
