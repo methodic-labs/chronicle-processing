@@ -1,6 +1,7 @@
 from prefect.tasks.secrets import PrefectSecret
 from prefect.tasks.docker.images import PullImage
-from prefect import task, Flow, Parameter, context
+from prefect.tasks.prefect import create_flow_run
+from prefect import task, Flow, Parameter, context, unmapped
 # from prefect.environments.storage import Docker
 from prefect.run_configs import DockerRun
 from prefect.agent.local import LocalAgent
@@ -24,8 +25,6 @@ import chronicle_process_functions
 
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
 # Timezone is UTC by default, but can be changed with an input arg
-# TIMEZONE = pendulum.timezone("UTC")
-
 #LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
 
 @task(checkpoint=False)
@@ -43,6 +42,7 @@ def connect(dbuser, password, hostname, port, type="sqlalchemy"):
         return conn
 
 @task
+# FOR DAILY PROCESSING
 def default_time_params(tz_input="UTC"):
     ''' set default start time - midnight UTC.
     Daily processing needs to go back 2 days to correctly set the flag for "large time gap" (1 day)'''
@@ -355,7 +355,9 @@ def write_preprocessed_data(dataset, conn, retries=3):
 
 @task(log_stdout=True)
 def how_export(data, filepath, filename, conn, format="csv"):
-    print(data)
+    # print(data)
+    if data is None:
+        print("No found app usages for time period. Nothing written, pipeline exiting.")
     if format=="csv":
         export_csv.run(data, filepath=filepath, filename=filename)
     else:
@@ -371,17 +373,16 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         # Set up input parameters
         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
+        tz_input = Parameter("timezone", default="UTC")
         participants = Parameter("participants", default=[]) #"Specific participant(s) candidate_id.", required=False
         studies = Parameter("studies", default=[]) #"Specific study/studies.", required=False
-        # daysback = Parameter("daysback", default=5) #"For daily processor, the number of days back.", required=False
-        tz_input = Parameter("timezone", default = "UTC")
         export_format = Parameter("export_format", default="")
         filepath = Parameter("filepath", default="")
         filename = Parameter("filename", default="")
         dbuser = Parameter("dbuser", default="datascience") # "Username to source database
         hostname = Parameter("hostname", default="chronicle.cey7u7ve7tps.us-west-2.redshift.amazonaws.com")
         port = Parameter("port", default=5439)  # Port of source database
-        password = PrefectSecret("dbpassword") # Password to source database
+        password = PrefectSecret("dbpassword")  # Password to source database
 
         engine = connect(dbuser, password, hostname, port, type="sqlalchemy")
         print("Connection to raw data successful!")
@@ -397,6 +398,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         print("Connection to export table successful!")
 
         how_export(processed, filepath, filename, conn, format = export_format)
+
 
 def main():
     #Register the flow when this is run as a script.
