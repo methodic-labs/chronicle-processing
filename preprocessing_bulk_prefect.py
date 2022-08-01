@@ -33,6 +33,34 @@ def bulk_time_params(start, end, delta, tz_input="UTC"):
     return (starts, ends)
 
 
+# Only necessary because one can't break down parameter outputs in a Flow.
+@task
+def all_batch_params(times_list, studies, password):
+    '''Written specifically to take in the output of bulk_time_params
+    function
+    times_list: a tuple of 2 lists
+    password: password to the db to be written into
+    output: a list of dictionaries, each with the parameters of a Prefect flow run'''
+    starts = times_list[0]
+    ends = times_list[1]
+
+    all_params = []
+    print(range(len(starts)))
+    for i in range(len(starts)):
+        single_flow_params = {"startdatetime": starts[i],
+                              "enddatetime": ends[i],
+                              "participants": [],
+                              "studies": studies,
+                              "timezone": tz_input,
+                              "export_format": "",
+                              "filepath": "",
+                              "filename": "",
+                              "dbuser": "datascience",
+                              "hostname": "chronicle.cey7u7ve7tps.us-west-2.redshift.amazonaws.com",
+                              "port": 5439,
+                              "password": password}
+        all_params.append(single_flow_params)
+    return all_params
 
 
 with Flow("preprocessing_bulk", storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_bulk_prefect.py"),
@@ -44,29 +72,8 @@ with Flow("preprocessing_bulk", storage=GitHub(repo="methodic-labs/chronicle-pro
     end_range = Parameter("end_range")  # 'End datetime for interval to be integrated.
     day_delta = Parameter("day_delta", default=3)  # The # of days to chunk out per interval, for each flow run
 
-    print(tz_input)
-
     time_parameters = bulk_time_params(start_range, end_range, day_delta, tz_input)
-    print(time_parameters)
-    starts = str(time_parameters[0])
-    ends = str(time_parameters[1])
-
-    all_bulk_params = []
-    print(range(len(starts)))
-    for i in range(len(starts)):
-        single_flow_params = {"startdatetime": starts[i],
-                        "enddatetime": ends[i],
-                        "participants": [],
-                        "studies": studies,
-                        "timezone": tz_input,
-                        "export_format": "",
-                        "filepath": "",
-                        "filename": "",
-                        "dbuser": "datascience",
-                        "hostname": "chronicle.cey7u7ve7tps.us-west-2.redshift.amazonaws.com",
-                        "port": 5439,
-                        "password": password}
-        all_bulk_params.append(single_flow_params)
+    all_bulk_params = all_batch_params(time_parameters, studies, password)
 
     mapped_flows = create_flow_run.map(
         parameters=all_bulk_params,
