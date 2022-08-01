@@ -13,7 +13,7 @@ import pendulum
 
 ##---------------- Running > 1 day of preprocessing (i.e. catchup jobs)-----------#
 # Writing into Redshift has a byte limit that is reached after ~2-3 days of heavy usage by 1 study. Iterating over days
-@task
+@task(log_stdout=True)
 def bulk_time_params(start, end, delta, tz_input="UTC"):
     '''FOR CATCHUP JOBS > 2 DAYS
        Returns a tuple of start and end datetimes, each in a list, for child flows.
@@ -34,8 +34,8 @@ def bulk_time_params(start, end, delta, tz_input="UTC"):
 
 
 # Only necessary because one can't break down parameter outputs in a Flow.
-@task
-def all_batch_params(times_list, studies, password):
+@task(log_stdout=True)
+def all_bulk_params(times_list, studies, participants, password):
     '''Written specifically to take in the output of bulk_time_params
     function
     times_list: a tuple of 2 lists
@@ -49,7 +49,7 @@ def all_batch_params(times_list, studies, password):
     for i in range(len(starts)):
         single_flow_params = {"startdatetime": starts[i],
                               "enddatetime": ends[i],
-                              "participants": [],
+                              "participants": participants,
                               "studies": studies,
                               "timezone": tz_input,
                               "export_format": "",
@@ -60,23 +60,26 @@ def all_batch_params(times_list, studies, password):
                               "port": 5439,
                               "password": password}
         all_params.append(single_flow_params)
+    print(all_params[0]) #check
     return all_params
 
 
 with Flow("preprocessing_bulk", storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_bulk_prefect.py"),
           run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
-    studies = Parameter("studies", default=[])  # "Specific study/studies.", required=False
-    tz_input = Parameter("timezone", default="UTC")
-    password = PrefectSecret("dbpassword")
     start_range = Parameter("start_range")  # 'Start datetime for interval to be integrated.'
     end_range = Parameter("end_range")  # 'End datetime for interval to be integrated.
     day_delta = Parameter("day_delta", default=3)  # The # of days to chunk out per interval, for each flow run
+    studies = Parameter("studies", default=[])  # "Specific study/studies.", required=False
+    participants = Parameter("participants", default=[])  # "Specific participant(s) candidate_id.", required=False
+    tz_input = Parameter("timezone", default="UTC")
+    password = PrefectSecret("dbpassword")
 
     time_parameters = bulk_time_params(start_range, end_range, day_delta, tz_input)
-    all_bulk_params = all_batch_params(time_parameters, studies, password)
+
+    all_runs_params = all_bulk_params(time_parameters, studies, participants, password)
 
     mapped_flows = create_flow_run.map(
-        parameters=all_bulk_params,
+        parameters=all_runs_params,
         flow_name=unmapped("preprocessing_daily"),
         project_name=unmapped("Preprocessing"),
     )
