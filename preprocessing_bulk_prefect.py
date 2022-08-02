@@ -7,14 +7,24 @@ from prefect.executors import LocalDaskExecutor
 import pandas as pd
 import pendulum
 
-# import sys
-# sys.path.insert(1,'/chronicle-processing')
-# import chronicle_process_functions
-
 ##---------------- Running > 1 day of preprocessing (i.e. catchup jobs)-----------#
 # Writing into Redshift has a byte limit that is reached after ~2-3 days of heavy usage by 1 study. Iterating over days
+import prefect
+
+@task
+def convert_to_utc(input_list):
+    if all(isinstance(s, str) for s in input_list):
+        dt = [pendulum.parse(x) for x in input_list]
+        dt2 = [x.in_tz('UTC') for x in dt]
+        dt3 = [x.strftime('%Y-%m-%d %H:%M') for x in dt2]
+    else:
+        print("Expected dates in a list of strings!")
+
+    return dt3
+
+
 @task(log_stdout=True)
-def bulk_time_params(start, end, delta, tz_input="UTC"):
+def bulk_time_params(start, end, delta, tz_input="UTC") -> tuple:   #output_type=1,
     '''FOR CATCHUP JOBS > 2 DAYS
        Returns a tuple of start and end datetimes, each in a list, for child flows.
        start: datetime string in format YYYY-MM-DD HH:mm:ss
@@ -30,19 +40,24 @@ def bulk_time_params(start, end, delta, tz_input="UTC"):
     ends.append(end_range.strftime('%Y-%m-%d %H:%M'))  # add the end date
 
     print(f"There are {len(starts)} start and {len(ends)} end datetimes in this batch integration.")
-    return (starts, ends)
+
+    return(starts, ends)
 
 
 # Only necessary because one can't break down parameter outputs in a Flow.
 @task(log_stdout=True)
-def all_bulk_params(times_list, studies, participants, password):
+def all_bulk_params(times_tuple, studies, participants, password, tz_input):
     '''Written specifically to take in the output of bulk_time_params
     function
     times_list: a tuple of 2 lists
     password: password to the db to be written into
     output: a list of dictionaries, each with the parameters of a Prefect flow run'''
-    starts = times_list[0]
-    ends = times_list[1]
+    starts = times_tuple[0]
+    ends = times_tuple[1]
+
+    if tz_input != "UTC":
+        starts = convert_to_utc.run(starts)
+        ends = convert_to_utc.run(ends)
 
     all_params = []
     print(range(len(starts)))
@@ -51,7 +66,7 @@ def all_bulk_params(times_list, studies, participants, password):
                               "enddatetime": ends[i],
                               "participants": participants,
                               "studies": studies,
-                              "timezone": tz_input,
+                              "timezone": "UTC",
                               "export_format": "",
                               "filepath": "",
                               "filename": "",
@@ -74,9 +89,8 @@ with Flow("preprocessing_bulk", storage=GitHub(repo="methodic-labs/chronicle-pro
     tz_input = Parameter("timezone", default="UTC")
     password = PrefectSecret("dbpassword")
 
-    time_parameters = bulk_time_params(start_range, end_range, day_delta, tz_input)
-
-    all_runs_params = all_bulk_params(time_parameters, studies, participants, password)
+    time_params = bulk_time_params(start_range, end_range, day_delta, tz_input)
+    all_runs_params = all_bulk_params(time_params, studies, participants, password, tz_input)
 
     mapped_flows = create_flow_run.map(
         parameters=all_runs_params,
