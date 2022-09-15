@@ -221,7 +221,7 @@ def add_warnings(df):
     df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \
                      timedelta(days=1)
-    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #3 hrs
+    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #HERE what "long" is, is set. 3 hrs. 
     df[columns.flags] = df.apply(combine_flags, axis=1)
     df = df.drop(['no_usage', 'long_usage'], axis=1)
     return df

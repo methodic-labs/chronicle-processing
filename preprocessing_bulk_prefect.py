@@ -75,7 +75,7 @@ def all_bulk_params(times_tuple, studies, participants, password, tz_input):
                               "port": 5439,
                               "password": password}
         all_params.append(single_flow_params)
-    print(all_params[0]) #check
+    # print(all_params[0]) #check
     return all_params
 
 

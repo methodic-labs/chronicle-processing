@@ -144,7 +144,7 @@ def extract_usage(dataframe,precision=3600):
             'app_record_type'] # was 'app_data_type'
 
     other_interactions = {
-        'Unknown importance: 16': "Screen Non-interactive",
+        'Unknown importance: 16': "Screen Non-interactive", # if you left it running
         'Unknown importance: 15': "Screen Interactive",
         'Unknown importance: 10': "Notification Seen",
         'Unknown importance: 12': "Notification Interruption"

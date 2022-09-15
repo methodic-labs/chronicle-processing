@@ -279,6 +279,10 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 .replace({np.NaN: None})
         dataset[['app_usage_flags']] = dataset[['app_usage_flags']].astype(str)
                 
+    if not dataset or dataset.empty:
+        print("No data to write! Pipeline is exiting.")
+        return
+
     participants = dataset['participant_id'].unique().tolist()
     tries = retries
     cursor = conn.cursor()
