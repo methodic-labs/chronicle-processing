@@ -279,7 +279,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 .replace({np.NaN: None})
         dataset[['app_usage_flags']] = dataset[['app_usage_flags']].astype(str)
                 
-    if not dataset or dataset.empty:
+    if dataset.empty:
         print("No data to write! Pipeline is exiting.")
         return
 
@@ -401,7 +401,11 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         conn = connect(dbuser, password, hostname, port, type="psycopg2")
         print("Connection to export table successful!")
 
-        how_export(processed, filepath, filename, conn, format = export_format)
+        # For times when there's no data to preprocess, and "prrocessed' returns nothing and does not exist
+        try:
+            how_export(processed, filepath, filename, conn, format = export_format)
+        except NameError:
+            print("No data to process. Pipeline exiting")
 
 
 def main():
