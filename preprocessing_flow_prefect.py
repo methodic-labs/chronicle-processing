@@ -279,7 +279,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 .replace({np.NaN: None})
         dataset[['app_usage_flags']] = dataset[['app_usage_flags']].astype(str)
                 
-    if dataset.empty:
+    if dataset is None or dataset.empty:
         print("No data to write! Pipeline is exiting.")
         return
 
