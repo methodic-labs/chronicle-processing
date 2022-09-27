@@ -212,8 +212,10 @@ def combine_flags(row):
     flags = []
     if row.no_usage:
         flags.append("LARGE TIME GAP")
-    if row.long_usage:
-        flags.append("LONG APP DURATION")
+    if row.usage_3hrs:
+        flags.append("3-HR APP DURATION")
+    if row.usage_6hrs:
+        flags.append("6-HR APP DURATION")
     return flags
 
 @task
@@ -221,9 +223,10 @@ def add_warnings(df):
     df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \
                      timedelta(days=1)
-    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #HERE what "long" is, is set. 3 hrs. 
+    df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #HERE this previously was "LONG USAGE"
+    df['usage_6hrs'] = df[columns.prep_duration_seconds] > 6 * 60 * 60
     df[columns.flags] = df.apply(combine_flags, axis=1)
-    df = df.drop(['no_usage', 'long_usage'], axis=1)
+    df = df.drop(['no_usage', 'usage_3hrs', 'usage_6hrs'], axis=1)
     return df
 
 

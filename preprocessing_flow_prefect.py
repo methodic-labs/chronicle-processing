@@ -14,6 +14,7 @@ import numpy as np
 import psycopg2
 import pendulum
 import time
+import math
 
 import prefect
 
@@ -343,14 +344,41 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset2 = final_data.to_numpy()
         args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                              tuple(map(tuple, dataset2)))
-        write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
-            app_record_type, app_title, app_full_name,\
-            app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
-           day, weekdayMF, weekdayMTh, weekdaySTh, \
-           app_engage_30s, app_switched_app, app_usage_flags) VALUES" + args_str.decode("utf-8")
-        cursor.execute(write_new_query)
-        print(
-            f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
+        limit = 16777216 #max bytes allowed in Redshift writes
+        n_writes_needed = math.ceil(len(args_str) / limit)
+
+        rows_in_preprocessed = len(dataset2)
+        bytes_per_row = len(args_str) / rows_in_preprocessed
+        rows_to_write = math.floor(limit / bytes_per_row)  # = number of rows until data reaches the limit
+
+        chunk_startrow = 0
+        iteration_count = 1
+
+        for i in range(n_writes_needed):
+            if rows_to_write * iteration_count > len(dataset2):
+                chunk_endrow = len(dataset2)
+            else:
+                chunk_endrow = rows_to_write * iteration_count
+
+            chunk_df = dataset2[chunk_startrow:chunk_endrow]
+            print(f"dataset2[{chunk_startrow}:{chunk_endrow}]")
+
+            chunk_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
+                                  tuple(map(tuple, chunk_df)))
+
+            write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
+                app_record_type, app_title, app_full_name,\
+                app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
+               day, weekdayMF, weekdayMTh, weekdaySTh, \
+               app_engage_30s, app_switched_app, app_usage_flags) VALUES" + chunk_str.decode("utf-8")
+            cursor.execute(write_new_query)
+            print(
+                f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
+
+            chunk_startrow = chunk_endrow
+            print(
+                f"Chunk {iteration_count} written.")
+            iteration_count += 1
 
     conn.commit()  # DOESN'T HAPPEN UNTIL THE COMMIT
     print("#-----------------------------------------------#")

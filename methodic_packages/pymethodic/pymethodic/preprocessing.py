@@ -147,7 +147,8 @@ def extract_usage(dataframe,precision=3600):
         'Unknown importance: 16': "Screen Non-interactive", # if you left it running
         'Unknown importance: 15': "Screen Interactive",
         'Unknown importance: 10': "Notification Seen",
-        'Unknown importance: 12': "Notification Interruption"
+        'Unknown importance: 12': "Notification Interruption",
+        'Unknown importance: 27': "Device Start up"
     }
 
     alldata = []
