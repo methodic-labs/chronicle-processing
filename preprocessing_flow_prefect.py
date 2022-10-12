@@ -114,7 +114,8 @@ def search_timebin(
         "Unknown importance: 12",
         "Unknown importance: 15",
         "Unknown importance: 16",
-        "Unknown importance: 26"
+        "Unknown importance: 26",
+        "Unknown importance: 27"
     ]
 
     starttime_chunk = starttime_range
@@ -344,7 +345,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset2 = final_data.to_numpy()
         args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                              tuple(map(tuple, dataset2)))
-        limit = 16777216 #max bytes allowed in Redshift writes
+        limit = 16707216 #max bytes allowed in Redshift writes
         n_writes_needed = math.ceil(len(args_str) / limit)
 
         rows_in_preprocessed = len(dataset2)
@@ -361,7 +362,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 chunk_endrow = rows_to_write * iteration_count
 
             chunk_df = dataset2[chunk_startrow:chunk_endrow]
-            print(f"dataset2[{chunk_startrow}:{chunk_endrow}]")
+            # print(f"dataset2[{chunk_startrow}:{chunk_endrow}]")
 
             chunk_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                                   tuple(map(tuple, chunk_df)))
