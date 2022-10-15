@@ -47,7 +47,7 @@ def clean_data(thisdata):
     thisdata['action'] = thisdata.apply(utils.get_action,axis=1)
     thisdata = thisdata.sort_values(by=['date_tzaware', 'action']).reset_index(drop=True)
 
-    return thisdata.drop(['action'],axis=1)
+    return thisdata.drop(['action'],axis=1, inplace=True)
 
 @task
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
@@ -148,6 +148,7 @@ def extract_usage(dataframe,precision=3600):
         'Unknown importance: 15': "Screen Interactive",
         'Unknown importance: 10': "Notification Seen",
         'Unknown importance: 12': "Notification Interruption",
+        'Unknown importance: 26': "Power Off",
         'Unknown importance: 27': "Device Start up"
     }
 
@@ -232,30 +233,6 @@ def extract_usage(dataframe,precision=3600):
                 alldata.append(timepoints)
                 
                 openapps[app]['open'] = False
-
-        if interaction == 'Unknown importance: 26': #power_off
-	        
-            for app in openapps.keys():
-            
-                if openapps[app]['open'] == True:
-                    
-                    # get time of opening
-                    prevtime = openapps[app]['time']
-                    
-                    if curtime-prevtime<timedelta(0):
-                        raise ValueError("ALARM ALARM: timepoints out of order !!")
-                    
-                    # split up timepoints by precision
-                    timepoints = get_timestamps.run(curtime,prevtime,precision=precision,row=row)
-                    
-                    timepoints[columns.prep_record_type] = 'Power Off'
-                    timepoints['app_timezone'] = row.app_timezone
-                    timepoints['study_id'] = row.study_id
-                    timepoints['app_title'] = row.app_title
-
-                    alldata.append(timepoints)
-                    
-                    openapps[app] = {'open': False}
         
         # if the interaction is a part of screen non/interactive or notifications...
         # logic should be the same
@@ -337,7 +314,7 @@ def log_exceed_durations_minutes(row, threshold, outfile):
 def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
     # dataframe = utils.backwards_compatibility(dataframe)
     utils.logger.run("LOG: Extracting usage...",level=1)
-    tmp = extract_usage.run(dataframe,precision=precision)
+    tmp = extract_usage.run(dataframe,precision=precision)   #HERE get app durations
     if not isinstance(tmp,pd.DataFrame) or np.sum(tmp[columns.prep_duration_seconds]) == 0:
         utils.logger.run(f"WARNING: Person {dataframe['participant_id'].iloc[0]} does not seem to contain relevant data.  Skipping...")
         return None
