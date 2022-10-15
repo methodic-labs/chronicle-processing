@@ -65,7 +65,8 @@ def search_timebin(
         "Unknown importance: 12",
         "Unknown importance: 15",
         "Unknown importance: 16",
-        "Unknown importance: 26"
+        "Unknown importance: 26",
+        "Unknown importance: 27"
     ]
 
     all_hits = []
