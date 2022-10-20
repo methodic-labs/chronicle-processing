@@ -345,7 +345,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset2 = final_data.to_numpy()
         args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                              tuple(map(tuple, dataset2)))
-        limit = 16707216 #max bytes allowed in Redshift writes
+        limit = 16606216 #max bytes allowed in Redshift writes = 16777216 bytes
         n_writes_needed = math.ceil(len(args_str) / limit)
 
         rows_in_preprocessed = len(dataset2)
@@ -400,6 +400,7 @@ def how_export(data, filepath, filename, conn, format="csv"):
 daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
 start_default = str(daily_range[0])
 end_default = str(daily_range[1])
+# default_pwd = PrefectSecret("dbpassword").run()
 
 # builds the DAG
 with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:

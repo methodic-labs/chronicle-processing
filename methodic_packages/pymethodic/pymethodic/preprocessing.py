@@ -47,7 +47,8 @@ def clean_data(thisdata):
     thisdata['action'] = thisdata.apply(utils.get_action,axis=1)
     thisdata = thisdata.sort_values(by=['date_tzaware', 'action']).reset_index(drop=True)
 
-    return thisdata.drop(['action'],axis=1, inplace=True)
+    thisdata.drop(['action'], axis=1, inplace=True)
+    return thisdata
 
 @task
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
