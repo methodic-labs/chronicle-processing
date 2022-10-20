@@ -14,7 +14,7 @@ def logger(message, level=1):
 
 def get_dt(row):
     '''
-    Transforms the reported datetime to a timestamp, IN LOCAL TIME.
+    Transforms the reported datetime to a timestamp, IN LOCAL TIME based on the reported timezone in the row.
     A few notes:
     - Time is rounded to 10 milliseconds, to make sure the apps are in the right order.
       A potential downside of this is that when a person closes and re-opens an app
@@ -29,6 +29,7 @@ def get_dt(row):
     if (type(row['app_date_logged']) is datetime) or (type(row['app_date_logged']) is pd.Timestamp):
         localtime = row[columns.raw_date_logged].astimezone(pytz.timezone(row[columns.timezone]))
         return localtime
+
 
 def get_action(row):
     '''
@@ -211,8 +212,10 @@ def combine_flags(row):
     flags = []
     if row.no_usage:
         flags.append("LARGE TIME GAP")
-    if row.long_usage:
-        flags.append("LONG APP DURATION")
+    if row.usage_3hrs:
+        flags.append("3-HR APP DURATION")
+    if row.usage_6hrs:
+        flags.append("6-HR APP DURATION")
     return flags
 
 @task
@@ -220,9 +223,10 @@ def add_warnings(df):
     df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \
                      timedelta(days=1)
-    df['long_usage'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #3 hrs
+    df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #HERE this previously was "LONG USAGE"
+    df['usage_6hrs'] = df[columns.prep_duration_seconds] > 6 * 60 * 60
     df[columns.flags] = df.apply(combine_flags, axis=1)
-    df = df.drop(['no_usage', 'long_usage'], axis=1)
+    df = df.drop(['no_usage', 'usage_3hrs', 'usage_6hrs'], axis=1)
     return df
 
 
