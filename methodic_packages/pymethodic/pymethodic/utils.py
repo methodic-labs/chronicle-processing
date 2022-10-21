@@ -210,23 +210,30 @@ def round_down_to_quarter(x):
 
 def combine_flags(row):
     flags = []
-    if row.no_usage:
-        flags.append("LARGE TIME GAP")
+    if row.no_usage_1day:
+        flags.append("1-DAY TIME GAP")
+    if row.no_usage_6hrs:
+        flags.append("6-HR TIME GAP")
+    if row.no_usage_12hrs:
+        flags.append("12-HR TIME GAP")
     if row.usage_3hrs:
         flags.append("3-HR APP DURATION")
-    if row.usage_6hrs:
-        flags.append("6-HR APP DURATION")
     return flags
 
 @task
 def add_warnings(df):
-    df['no_usage'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
+    df['no_usage_1day'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
                      pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) > \
-                     timedelta(days=1)
-    df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  #HERE this previously was "LONG USAGE"
-    df['usage_6hrs'] = df[columns.prep_duration_seconds] > 6 * 60 * 60
+                     timedelta(days=1)              # This previously was "LARGE TIME GAP"
+    df['no_usage_6hrs'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
+                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) > \
+                     timedelta(hours=6)
+    df['no_usage_12hrs'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
+                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) > \
+                     timedelta(hours=12)
+    df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  # This previously was "LONG USAGE"
     df[columns.flags] = df.apply(combine_flags, axis=1)
-    df = df.drop(['no_usage', 'usage_3hrs', 'usage_6hrs'], axis=1)
+    df = df.drop(['no_usage_1day', 'no_usage_6hrs', 'no_usage_12hrs', 'usage_3hrs'], axis=1)
     return df
 
 

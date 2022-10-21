@@ -1,5 +1,5 @@
-from pymethodic import preprocessing
-from pymethodic import utils as ut
+from methodic_packages.pymethodic import preprocessing
+from methodic_packages.pymethodic import utils as ut
 # from pymethodic.constants import interactions, columns
 from pymethodic.constants import columns as es
 from datetime import timedelta

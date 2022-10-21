@@ -1,26 +1,20 @@
-from prefect.tasks.secrets import PrefectSecret
-from prefect.tasks.docker.images import PullImage
-from prefect.tasks.prefect import create_flow_run
-from prefect import task, Flow, Parameter, context, unmapped
+import math
+import sys
+import time
+from datetime import timedelta
+from uuid import uuid4
+
+import numpy as np
+import pandas as pd
+import pendulum
+import psycopg2
+import sqlalchemy as sq
+from prefect import task, Flow, Parameter
 # from prefect.environments.storage import Docker
 from prefect.run_configs import DockerRun
-from prefect.agent.local import LocalAgent
 from prefect.storage import GitHub
-from datetime import timedelta
-import sqlalchemy as sq
-from uuid import uuid4
-import pandas as pd
-import numpy as np
-import psycopg2
-import pendulum
-import time
-import math
+from prefect.tasks.secrets import PrefectSecret
 
-import prefect
-
-from pymethodic import utils as ut
-import pymethodic
-import sys
 sys.path.insert(1,'/chronicle-processing')
 import chronicle_process_functions
 

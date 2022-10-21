@@ -3,7 +3,7 @@ This repository contains code to process data from the Chronicle app, via Method
   
 Installation of the `pymethodic` module (located here) is required.
 1. Clone this repository.
-2. In Terminal (Mac) or the command prompt (Windows) navigate to the `pymethodic` folder
+2. In Terminal (Mac) or the command prompt (Windows) navigate to the `methodic_packages/pymethodic` folder
 3. Type in `pip3 install .`
 
 
@@ -22,4 +22,4 @@ The following fields are the outputs of Chronicle preprocessing:
 - *weekdaySTh:* Whether or not this usage falls on a weekday: 1 = Sun-Thu, 0 = Fri+Sat
 - *app_engage_30s:* T/F - was it the first time person used their phone is x minutes/seconds 
 - *app_switched_app:* _(previously named `app_switch_app`)_  T/F - app was a different app than the one before
-- *app_usage_flags:* Text flags for the following conditions, if present: "Large time gap" (1 day), "Long app duration" (3 hrs).
+- *app_usage_flags:* Text flags for the following conditions, if present: "6-HR TIME GAP", "12-HR TIME GAP", "1-DAY TIME GAP" _(1 day; previously named "Large time gap")_, "3-HR APP DURATION" _(previously named "Long app duration")_.
