@@ -339,7 +339,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
         dataset2 = final_data.to_numpy()
         args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in
                              tuple(map(tuple, dataset2)))
-        limit = 16606216 #max bytes allowed in Redshift writes = 16777216 bytes
+        limit = 16506216 #max bytes allowed in Redshift writes = 16777216 bytes
         n_writes_needed = math.ceil(len(args_str) / limit)
 
         rows_in_preprocessed = len(dataset2)
