@@ -109,7 +109,8 @@ def search_timebin(
         "Unknown importance: 15",
         "Unknown importance: 16",
         "Unknown importance: 26",
-        "Unknown importance: 27"
+        "Unknown importance: 27",
+        "User Interaction"
     ]
 
     starttime_chunk = starttime_range
@@ -185,7 +186,7 @@ def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_inp
         enddatetime = str(enddatetime)
         enddatetime = pendulum.parse(enddatetime, tz=timezone)
 
-    # Loop over all participant IDs (could be parellized at some point):
+    # Loop over all participant IDs (could be parallelized at some point):
     preprocessed_data = []
     ids = rawdatatable['participant_id'].unique()
 

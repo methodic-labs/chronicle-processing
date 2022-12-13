@@ -54,7 +54,7 @@ def clean_data(thisdata):
 def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
-    Returns a dataframe with the number of rows the number of time units (= precision in seconds).
+    Returns a dataframe with the number of rows the number of time units (= precision in minutes).
     USE LOCAL TIME to extract the correct date (include timezone)
     '''
     if not prevtime:
@@ -92,6 +92,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     for timepoint in range(timepoints_n+1):
         starttime = prevtime if timepoint == 0 else prevtimerounded+delta
         endtime = curtime if timepoint == timepoints_n else prevtimerounded+delta+timedelta(seconds=precision)
+        total_duration = endtime - starttime
 
         outmetrics = {
             columns.prep_datetime_start: starttime,
@@ -113,6 +114,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
         outmetrics['participant_id'] = row['participant_id']
         outmetrics[columns.full_name] = row[columns.full_name]
         outmetrics[columns.title] = row[columns.title]
+        outmetrics[columns.flags] = "3-HR APP DURATION" if total_duration.seconds > 3 * 3600 else None
 
         delta = delta+timedelta(seconds=precision)
         outtime.append(outmetrics)
@@ -143,15 +145,16 @@ def extract_usage(dataframe,precision=3600):
             'quarter',
             'app_duration_seconds',
             'app_record_type'] # was 'app_data_type'
-
     other_interactions = {
         'Unknown importance: 16': "Screen Non-interactive", # if you left it running
         'Unknown importance: 15': "Screen Interactive",
         'Unknown importance: 10': "Notification Seen",
         'Unknown importance: 12': "Notification Interruption",
         'Unknown importance: 26': "Power Off",
-        'Unknown importance: 27': "Device Start up"
+        'Unknown importance: 27': "Device Start up",
+        'User Interaction': "User Interaction"
     }
+
 
     alldata = []
 
@@ -172,7 +175,7 @@ def extract_usage(dataframe,precision=3600):
             openapps[app] = {"open" : True,
                              "time": curtime}
 
-            # Iterate through older apps
+            # For each row in the raw data, iterate through the 'openapps' dict keys
             # if the app isn't the old app, then it's no longer opened, so "close" all of the other apps
             # only the latest Foregrounded is "open"
             for olderapp, appdata in openapps.items():
@@ -208,7 +211,7 @@ def extract_usage(dataframe,precision=3600):
 
                     latest_unbackgrounded = False # reset to empty
 
-            # ONLY the one open app.
+            # HERE the actions for "Move to Foreground" continue (the background loop above is skipped)
             if app in openapps.keys() and openapps[app]['open']==True:
 
                 # get time it was opened - the raw data timestamp
@@ -219,11 +222,13 @@ def extract_usage(dataframe,precision=3600):
                 cur_tzname = curtime.tzinfo.zone
                 prevtime = prevtime.astimezone(cur_tzname)
 
+                # Checks that end (curtime) is later than start time (prevtime)
                 # Make timediff check in UTC in case the timezones differ
                 if pendulum.instance(curtime).in_timezone('UTC')-pendulum.instance(prevtime).in_timezone('UTC')<timedelta(0):
                     raise ValueError("ALARM ALARM: timepoints out of order !!")
 
-                # split up timepoints by precision
+                # split up timepoints by precision - HERE IS WHERE APP USAGE IS SPLIT INTO HOURLY CHUNKS
+                # precision = 3600 seconds
                 timepoints = get_timestamps.run(curtime,prevtime,precision=precision,row=row)
 
                 timepoints[columns.prep_record_type] = 'App Usage'
@@ -243,13 +248,14 @@ def extract_usage(dataframe,precision=3600):
             timepoints['app_timezone'] = row.app_timezone
             timepoints['study_id'] = row.study_id
             timepoints['app_title'] = row.app_title
+            timepoints[columns.flags] = None
             alldata.append(timepoints)
 
     if len(alldata)>0:
         alldata = pd.concat(alldata, axis=0)
         alldata = alldata.sort_values(by=[columns.prep_datetime_start, columns.prep_datetime_end]).reset_index(drop=True)
         cols_to_select = list(set(cols).intersection(set(alldata.columns)))
-        cols_to_select.extend(['app_timezone', 'app_title'])
+        cols_to_select.extend(['app_timezone', 'app_title', columns.flags])
         alldata[cols_to_select].reset_index(drop=True)
         return alldata
 
@@ -321,7 +327,7 @@ def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
         return None
     utils.logger.run("LOG: checking overlap session...",level=1)
     data = check_overlap_add_sessions.run(tmp,session_def=sessioninterval)
-    data = utils.add_warnings.run(data)
+    data = utils.add_warnings.run(data) #Add flags for long usage or usage gaps
     non_timed = tmp[tmp[columns.prep_duration_seconds].isna()]
     flagcols = [x for x in non_timed.columns if 'engage' in x or 'switch' in x]
     non_timed.loc[:, (flagcols)] = None
