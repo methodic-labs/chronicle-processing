@@ -210,12 +210,12 @@ def round_down_to_quarter(x):
 
 def combine_flags(row):
     flags = []
-    if row.no_usage_1day:
-        flags.append("1-DAY TIME GAP")
-    if row.no_usage_6hrs:
+    if row.no_usage_6hrs and not row.no_usage_12hrs:
         flags.append("6-HR TIME GAP")
-    if row.no_usage_12hrs:
+    if row.no_usage_12hrs and row.no_usage_6hrs and not row.no_usage_1day:
         flags.append("12-HR TIME GAP")
+    if row.no_usage_1day and row.no_usage_6hrs and row.no_usage_12hrs:
+        flags.append("1-DAY TIME GAP")
     # if row.usage_3hrs:
     #     flags.append("3-HR APP DURATION")
     return flags
@@ -230,8 +230,6 @@ def add_warnings(df):
     #### Moved to within 'get_timestamps' in preprocessing.py to check before the durations are split into hourly chunks
     # df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  # This previously was "LONG USAGE"
     df[columns.flags] = df.apply(combine_flags, axis=1)
-    df[columns.flags] = df[columns.flags].replace({"'1-DAY TIME GAP', '6-HR TIME GAP', '12-HR TIME GAP'": "'1-DAY TIME GAP'",
-                                                   "'6-HR TIME GAP', '12-HR TIME GAP'": "'12-HR TIME GAP'"})
     df = df.drop(['no_usage_1day', 'no_usage_6hrs', 'no_usage_12hrs'], axis=1)
     return df
 
