@@ -222,24 +222,16 @@ def combine_flags(row):
 
 @task
 def add_warnings(df):
-    df['no_usage_1day'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc= True) >= \
-                     timedelta(days=1)   # This previously was "LARGE TIME GAP"
-    df['no_usage_6hrs'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) > \
-                     timedelta(hours=6) and \
-                     pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) < \
-                     timedelta(hours=12)
-    df['no_usage_12hrs'] = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) >= \
-                     timedelta(hours=12) and \
-                     pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-                     pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True) < \
-                     timedelta(days=1)
+    timediff = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
+        pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True)
+    df['no_usage_1day'] = timediff >= timedelta(days=1)   # This previously was "LARGE TIME GAP"
+    df['no_usage_6hrs'] = timediff >= timedelta(hours=6)
+    df['no_usage_12hrs'] = timediff >= timedelta(hours=12)
     #### Moved to within 'get_timestamps' in preprocessing.py to check before the durations are split into hourly chunks
     # df['usage_3hrs'] = df[columns.prep_duration_seconds] > 3 * 60 * 60  # This previously was "LONG USAGE"
     df[columns.flags] = df.apply(combine_flags, axis=1)
+    df[columns.flags] = df[columns.flags].replace({"'1-DAY TIME GAP', '6-HR TIME GAP', '12-HR TIME GAP'": "'1-DAY TIME GAP'",
+                                                   "'6-HR TIME GAP', '12-HR TIME GAP'": "'12-HR TIME GAP'"})
     df = df.drop(['no_usage_1day', 'no_usage_6hrs', 'no_usage_12hrs'], axis=1)
     return df
 

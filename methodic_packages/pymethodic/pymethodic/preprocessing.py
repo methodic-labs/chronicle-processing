@@ -114,7 +114,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
         outmetrics['participant_id'] = row['participant_id']
         outmetrics[columns.full_name] = row[columns.full_name]
         outmetrics[columns.title] = row[columns.title]
-        outmetrics[columns.flags] = "3-HR APP DURATION" if total_duration > 3 * 3600 else None
+        outmetrics[columns.flags] = "3-HR APP DURATION" if total_duration.seconds > 3 * 3600 else None
 
         delta = delta+timedelta(seconds=precision)
         outtime.append(outmetrics)
