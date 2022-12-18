@@ -172,19 +172,19 @@ def search_timebin(
 
 # TRANSFORM
 @task(log_stdout=True)
-def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_input="UTC"):
+def chronicle_process(rawdatatable, tz_input="UTC"):
     ''' rawdatatable: pandas dataframe passed in from the search_timebin function.'''
     if rawdatatable.shape[0] == 0:
         print("No found app usages :-\ ...")
         return None
 
-    timezone = pendulum.timezone(tz_input)
-    if startdatetime is not None:
-        startdatetime = str(startdatetime)
-        startdatetime = pendulum.parse(startdatetime, tz=timezone)
-    if enddatetime is not None:
-        enddatetime = str(enddatetime)
-        enddatetime = pendulum.parse(enddatetime, tz=timezone)
+    # timezone = pendulum.timezone(tz_input)
+    # if startdatetime is not None:
+    #     startdatetime = str(startdatetime)
+    #     startdatetime = pendulum.parse(startdatetime, tz=timezone)
+    # if enddatetime is not None:
+    #     enddatetime = str(enddatetime)
+    #     enddatetime = pendulum.parse(enddatetime, tz=timezone)
 
     # Loop over all participant IDs (could be parallelized at some point):
     preprocessed_data = []
@@ -198,9 +198,7 @@ def chronicle_process(rawdatatable, startdatetime=None, enddatetime=None, tz_inp
             # ------- PREPROCESSING - 1 person at a time. RETURNS DF
             person_df_preprocessed = chronicle_process_functions.get_person_preprocessed_data.run(
                 person,
-                rawdatatable,
-                startdatetime,
-                enddatetime
+                rawdatatable
             )
 
             if isinstance(person_df_preprocessed, None.__class__):
@@ -420,7 +418,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         raw = search_timebin(startdatetime, enddatetime, tz_input, engine, participants, studies)
 
         # Transform:
-        processed = chronicle_process(raw, startdatetime, enddatetime, tz_input)
+        processed = chronicle_process(raw, tz_input)
 
         # Write out:
         conn = connect(dbuser, password, hostname, port, type="psycopg2")

@@ -69,7 +69,8 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
             columns.prep_record_type: np.NaN,
             "participant_id": row['participant_id'],
             columns.full_name: row[columns.full_name],
-            columns.title: row[columns.title]
+            columns.title: row[columns.title],
+            columns.flags: np.NaN
         }]
 
         return pd.DataFrame(outtime)
@@ -79,20 +80,23 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     seconds_since_prevtimehour = np.floor((prevtime-prevtimehour).seconds/precision)*precision
     prevtimerounded = prevtimehour+timedelta(seconds=seconds_since_prevtimehour)
 
-    # number of timepoints on precision scale (= new rows )
-    # Make timedif check in UTC in case the timezones differ
+    # Timedif will always be max=3600 sec for hourly chunks. Make check in UTC in case the timezones differ
+    # timepoints_n = number of new rows
+    # i.e., 3 rows if it is 3+ hrs of usage split into hourly chunks
     timedif = (pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtimerounded).in_timezone('UTC'))
     timepoints_n = int(np.floor(timedif.seconds/precision)+int(timedif.days*24*60*60/precision))
 
     # run over timepoints and append datetimestamps
     delta = timedelta(seconds=0)
     outtime = []
+    total_duration = []
 
-    # START TIME IS SOMETIMES PREVIOUS TIME INSTEAD OF DATE LOGGED - HERE'S WHERE THE DISCREPANCY COMES IN.
+    # START TIME IS SOMETIMES PREVIOUS TIME INSTEAD OF DATE LOGGED - HERE'S WHERE DISCREPANCIES CAN COME IN.
     for timepoint in range(timepoints_n+1):
-        starttime = prevtime if timepoint == 0 else prevtimerounded+delta
+        starttime = prevtime if timepoint == 0 else prevtimerounded+delta #POWER OFF BEHAVIOR
         endtime = curtime if timepoint == timepoints_n else prevtimerounded+delta+timedelta(seconds=precision)
-        total_duration = endtime - starttime
+        duration = np.round((pendulum.instance(endtime).in_timezone('UTC') - pendulum.instance(
+                starttime).in_timezone('UTC')).total_seconds())
 
         outmetrics = {
             columns.prep_datetime_start: starttime,
@@ -107,16 +111,19 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
             "hour": starttime.hour,
             "quarter": int(np.floor(starttime.minute/15.))+1,
             # Durations: convert start & end to UTC for consistency in case they're logged in diff timezones
-            columns.prep_duration_seconds: np.round((pendulum.instance(endtime).in_timezone('UTC') - pendulum.instance(
-                starttime).in_timezone('UTC')).total_seconds())
+            columns.prep_duration_seconds: duration
         }
 
         outmetrics['participant_id'] = row['participant_id']
         outmetrics[columns.full_name] = row[columns.full_name]
         outmetrics[columns.title] = row[columns.title]
-        outmetrics[columns.flags] = "3-HR APP DURATION" if total_duration.seconds > 3 * 3600 else None
 
         delta = delta+timedelta(seconds=precision)
+
+        total_duration.append(duration)
+        flag = "3-HR APP DURATION" if sum(total_duration) > 10800 else None  # This previously was "LONG USAGE"
+        outmetrics[columns.flags] = flag
+
         outtime.append(outmetrics)
 
     return pd.DataFrame(outtime)
@@ -168,7 +175,7 @@ def extract_usage(dataframe,precision=3600):
         app = row['app_full_name']
 
         # USE LOCAL TIME - must be for `get_timestamps` to be correct when it infers dates
-        curtime = row.date_tzaware #app_date_logged.
+        curtime = row.date_tzaware #app_date_logged
 
         # make dict entry of every app that was moved to foreground. Time is local.
         if interaction == 'Move to Foreground':
@@ -194,11 +201,12 @@ def extract_usage(dataframe,precision=3600):
             # ONLY applies to the one latest unbackgrounded app.
             if latest_unbackgrounded and app == latest_unbackgrounded['unbgd_app']:
                 # Make timediff check in UTC in case the timezones differ
-                timediff = pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(latest_unbackgrounded['fg_time']).in_timezone('UTC')
-                
-                if timediff < timedelta(seconds=1):
+                timediff = pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(
+                    latest_unbackgrounded['fg_time']).in_timezone('UTC')
 
-                    timepoints = get_timestamps.run(curtime, latest_unbackgrounded['unbgd_time'], precision=precision, row=row)
+                if timediff < timedelta(seconds=1):
+                    timepoints = get_timestamps.run(curtime, latest_unbackgrounded['unbgd_time'],
+                                                    precision=precision, row=row)
 
                     timepoints[columns.prep_record_type] = 'App Usage'
                     timepoints['app_timezone'] = row.app_timezone
@@ -208,28 +216,25 @@ def extract_usage(dataframe,precision=3600):
                     alldata.append(timepoints)
 
                     openapps[app]['open'] = False
+                    latest_unbackgrounded = False  # reset to empty
 
-                    latest_unbackgrounded = False # reset to empty
-
-            # HERE the actions for "Move to Foreground" continue (the background loop above is skipped)
-            if app in openapps.keys() and openapps[app]['open']==True:
-
-                # get time it was opened - the raw data timestamp
-                prevtime = openapps[app]['time']
+            # BACK TO FOREGROUND PROCESSING - the 'Move to background' app is skipped if so
+            if app in openapps.keys() and openapps[app]['open'] == True:
+                prevtime = openapps[app]['time']  # time it was opened - the raw data timestamp
 
                 # If the start/end of app usage is in different timezones, convert to the end timezone
                 # it they are the same, this changes nothing.
                 cur_tzname = curtime.tzinfo.zone
                 prevtime = prevtime.astimezone(cur_tzname)
 
-                # Checks that end (curtime) is later than start time (prevtime)
-                # Make timediff check in UTC in case the timezones differ
-                if pendulum.instance(curtime).in_timezone('UTC')-pendulum.instance(prevtime).in_timezone('UTC')<timedelta(0):
+                # Checks that end (curtime) is later than start (prevtime) - in UTC in case the timezones differ
+                if pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtime).in_timezone(
+                        'UTC') < timedelta(0):
                     raise ValueError("ALARM ALARM: timepoints out of order !!")
 
-                # split up timepoints by precision - HERE IS WHERE APP USAGE IS SPLIT INTO HOURLY CHUNKS
-                # precision = 3600 seconds
-                timepoints = get_timestamps.run(curtime,prevtime,precision=precision,row=row)
+                # HERE IS WHERE APP USAGE IS SPLIT INTO HOURLY CHUNKS AND DURATIONS ARE CALCULATED
+                # split up timepoints by precision, 3600 seconds (1 hr)
+                timepoints = get_timestamps.run(curtime, prevtime, precision=precision, row=row)
 
                 timepoints[columns.prep_record_type] = 'App Usage'
                 timepoints['app_timezone'] = row.app_timezone
@@ -237,9 +242,9 @@ def extract_usage(dataframe,precision=3600):
                 timepoints['app_title'] = row.app_title
 
                 alldata.append(timepoints)
-                
+
                 openapps[app]['open'] = False
-        
+
         # if the interaction is a part of screen non/interactive or notifications...
         # logic should be the same
         if interaction in other_interactions.keys():
@@ -344,6 +349,7 @@ def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
                              'app_datetime_start', 'app_datetime_end', 'app_timezone', 'app_duration_seconds',
                              'day', 'weekdayMF', 'weekdayMTh', 'weekdaySTh',
                              'app_engage_30s', 'app_switched_app', 'app_usage_flags']]
+    data_fordownload.sort_values(by=['app_datetime_start'], inplace=True)
     return data_fordownload
     
     

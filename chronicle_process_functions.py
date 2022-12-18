@@ -1,12 +1,10 @@
 from methodic_packages.pymethodic import preprocessing
 # from pymethodic.constants import interactions, columns
 from pymethodic.constants import columns as es
-from datetime import timedelta
 from prefect import task
 # from . import utils as ut
 import pendulum
 import pandas as pd
-import dateutil
 
 TIMEZONE = pendulum.timezone("UTC")
 
@@ -44,9 +42,6 @@ def query_usage_table(start, end, filters, engine, counting=False, users=[], stu
 def get_person_preprocessed_data(
     person: "the participantID",
     datatable: "the raw data",
-    # constants: "dictionary of constants",
-    startdatetime = None,
-    enddatetime = None
 ) -> pd.DataFrame:
     '''
     Select the data to be preprocessed, one person at a time, and run through preprocessor
