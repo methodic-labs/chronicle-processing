@@ -9,7 +9,7 @@ import pendulum
 
 ##---------------- Running > 1 day of preprocessing (i.e. catchup jobs)-----------#
 # Writing into Redshift has a byte limit that is reached after ~2-3 days of heavy usage by 1 study. Iterating over days
-import prefect
+
 
 @task
 def convert_to_utc(input_list):

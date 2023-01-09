@@ -2,9 +2,10 @@ from datetime import datetime, timedelta, timezone
 from .constants import columns
 from prefect import task
 import dateutil.parser
+import dateutil.tz
 import pandas as pd
 import numpy as np
-import pytz
+import pendulum
 
 @task
 def logger(message, level=1):
@@ -22,12 +23,12 @@ def get_dt(row):
     '''
     if type(row['app_date_logged']) is str:
         zulutime = dateutil.parser.parse(row[columns.raw_date_logged])
-        localtime = zulutime.replace(tzinfo=timezone.utc).astimezone(tz=pytz.timezone(row[columns.timezone]))
+        localtime = zulutime.replace(tzinfo=timezone.utc).astimezone(dateutil.tz.gettz(row[columns.timezone]))
         # microsecond = min(round(localtime.microsecond / 10000)*10000, 990000)
         # localtime = localtime.replace(microsecond = microsecond)
         return localtime
     if (type(row['app_date_logged']) is datetime) or (type(row['app_date_logged']) is pd.Timestamp):
-        localtime = row[columns.raw_date_logged].astimezone(pytz.timezone(row[columns.timezone]))
+        localtime = row[columns.raw_date_logged].astimezone(dateutil.tz.gettz(row[columns.timezone]))
         return localtime
 
 
@@ -41,6 +42,91 @@ def get_action(row):
     if row[columns.raw_record_type]== 'Move to Background':
         return 1
 
+
+@task
+def query_usage_table(start, end, filters, engine, counting=False, users=[], studies=[]):
+    '''Constructs the query on the usage data table - to count and also to grab data.
+    users = optional people to select for, input as ['participant_id1', 'participant_id2']
+    studies = optional studies to select for, input as ['study_id1', 'study_id2']
+    COUNTING: returns a scalar
+    NOT COUNTING: returns a sqlalchemy ResultProxy (a tuple)'''
+
+    selection = "count(*)" if counting else "*"
+    if len(users) > 0:
+        person_filter = f''' and \"participant_id\" IN ({', '.join(f"'{u}'" for u in users)})'''
+    else:
+        person_filter = ""
+    if len(studies) > 0:
+        study_filter = f''' and \"study_id\" IN ({', '.join(f"'{s}'" for s in studies)})'''
+    else:
+        study_filter = ""
+
+    data_query = f'''SELECT {selection} from chronicle_usage_events 
+        WHERE "event_timestamp" between '{start}' and '{end}' 
+        and "interaction_type" IN ({', '.join(f"'{w}'" for w in filters)}){person_filter}{study_filter};'''
+
+    if counting:
+        output = engine.execute(data_query).scalar()
+    else:
+        output = engine.execute(data_query)
+
+    return output
+
+
+@task
+def query_export_table(start, end, timezone, counting=True, users=[], studies=[]):
+    '''Helper function -  SQL query passed to the usage exports table
+    makes queries - to count and also to delete data.
+    For writing to the preprocessing backend table in Redshift
+    '''
+    # Timestamp must be converted to the timezone of the production db (which is UTC) for proper comparison
+    timezone_of_data = timezone
+
+    start_utc = pendulum.parse(start, tz=timezone_of_data).in_tz('UTC') #must be timezone of the system
+    end_utc = pendulum.parse(end, tz=timezone_of_data).in_tz('UTC')
+
+    selection = "SELECT count(*)" if counting else "DELETE"
+
+    if len(users) > 0:
+        person_filter = f''' and \"participant_id\" = \'{users}\''''
+    else:
+        person_filter = ""
+    if len(studies) > 0:
+        study_filter = f''' and \"study_id\" IN ({', '.join(f"'{s}'" for s in studies)})'''
+    else:
+        study_filter = ""
+
+    data_query = f'''{selection} from preprocessed_usage_events
+            WHERE "app_datetime_start" between '{start_utc}' and '{end_utc}' 
+            {person_filter}{study_filter};'''
+
+    return data_query
+
+
+def combine_flags(row):
+    flags = []
+    if row.no_usage_6hrs and not row.no_usage_12hrs:
+        flags.append("6-HR TIME GAP")
+    if row.no_usage_12hrs and row.no_usage_6hrs and not row.no_usage_1day:
+        flags.append("12-HR TIME GAP")
+    if row.no_usage_1day and row.no_usage_6hrs and row.no_usage_12hrs:
+        flags.append("1-DAY TIME GAP")
+    return flags
+
+@task
+def add_warnings(df):
+    timediff = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
+        pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True)
+    df['no_usage_1day'] = timediff >= timedelta(days=1)   # This previously was "LARGE TIME GAP"
+    df['no_usage_6hrs'] = timediff >= timedelta(hours=6)
+    df['no_usage_12hrs'] = timediff >= timedelta(hours=12)
+    df[columns.flags] = np.where(df[columns.flags] == "3-HR APP DURATION",
+                                 "3-HR APP DURATION",
+                                 df.apply(combine_flags, axis=1))
+    df = df.drop(['no_usage_1day', 'no_usage_6hrs', 'no_usage_12hrs'], axis=1)
+    return df
+
+
 @task
 def recode(row,recode):
     newcols = {x:None for x in recode.columns}
@@ -49,6 +135,7 @@ def recode(row,recode):
             newcols[col] = recode[col][row[columns.full_name]]
 
     return pd.Series(newcols)
+
 
 @task
 def fill_dates(dataset,datelist):
@@ -208,27 +295,6 @@ def round_down_to_quarter(x):
         return None
     return int(np.floor(x.minute / 15.)) + 1
 
-def combine_flags(row):
-    flags = []
-    if row.no_usage_6hrs and not row.no_usage_12hrs:
-        flags.append("6-HR TIME GAP")
-    if row.no_usage_12hrs and row.no_usage_6hrs and not row.no_usage_1day:
-        flags.append("12-HR TIME GAP")
-    if row.no_usage_1day and row.no_usage_6hrs and row.no_usage_12hrs:
-        flags.append("1-DAY TIME GAP")
-    return flags
 
-@task
-def add_warnings(df):
-    timediff = pd.to_datetime(df[columns.prep_datetime_start], utc=True) - \
-        pd.to_datetime(df[columns.prep_datetime_end].shift(), utc=True)
-    df['no_usage_1day'] = timediff >= timedelta(days=1)   # This previously was "LARGE TIME GAP"
-    df['no_usage_6hrs'] = timediff >= timedelta(hours=6)
-    df['no_usage_12hrs'] = timediff >= timedelta(hours=12)
-    df[columns.flags] = np.where(df[columns.flags] == "3-HR APP DURATION",
-                                 "3-HR APP DURATION",
-                                 df.apply(combine_flags, axis=1))
-    df = df.drop(['no_usage_1day', 'no_usage_6hrs', 'no_usage_12hrs'], axis=1)
-    return df
 
 
