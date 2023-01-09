@@ -14,9 +14,11 @@ from prefect import task, Flow, Parameter
 from prefect.run_configs import DockerRun
 from prefect.storage import GitHub
 from prefect.tasks.secrets import PrefectSecret
+from methodic_packages.pymethodic import utils as ut
+from methodic_packages.pymethodic import preprocessing
 
 sys.path.insert(1,'/chronicle-processing')
-import chronicle_process_functions
+# import chronicle_process_functions
 
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
 # Timezone is UTC by default, but can be changed with an input arg
@@ -48,34 +50,6 @@ def default_time_params(tz_input="UTC"):
     return (start_default, end_default)
 
 
-@task
-def query_usage_table(start, end, filters, engine, counting=False, users=[], studies=[]):
-    '''Constructs the query on the usage data table - to count and also to grab data.
-    users = optional people to select for, input as ['participant_id1', 'participant_id2']
-    studies = optional studies to select for, input as ['study_id1', 'study_id2']
-    COUNTING: returns a scalar
-    NOT COUNTING: returns a sqlalchemy ResultProxy (a tuple)'''
-
-    selection = "count(*)" if counting else "*"
-    if len(users) > 0:
-        person_filter = f''' and \"participant_id\" IN ({', '.join(f"'{u}'" for u in users)})'''
-    else:
-        person_filter = ""
-    if len(studies) > 0:
-        study_filter = f''' and \"study_id\" IN ({', '.join(f"'{s}'" for s in studies)})'''
-    else:
-        study_filter = ""
-
-    data_query = f'''SELECT {selection} from chronicle_usage_events 
-        WHERE "event_timestamp" between '{start}' and '{end}' 
-        and "interaction_type" IN ({', '.join(f"'{w}'" for w in filters)}){person_filter}{study_filter};'''
-
-    if counting:
-        output = engine.execute(data_query).scalar()
-    else:
-        output = engine.execute(data_query)
-
-    return output
 
 # EXTRACT
 @task(log_stdout=True)
@@ -123,7 +97,7 @@ def search_timebin(
         print("#---------------------------------------------------------#")
         print(f"Searching {starttime_chunk} to {endtime_chunk}")
 
-        first_count = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
+        first_count = ut.query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
                                         counting=True, users=participants, studies=studies)
         count_of_data = first_count
         # print(f"Endtime is now {endtime_chunk}, count is {count_of_data}.")
@@ -135,7 +109,7 @@ def search_timebin(
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
 
-            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+            second_count = ut.query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
                                              users=participants, studies=studies)
             count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
@@ -149,7 +123,7 @@ def search_timebin(
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             print(f"Now searching between {starttime_chunk} and {end_interval}.")
 
-            second_count = query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
+            second_count = ut.query_usage_table.run(starttime_chunk, end_interval, filters, engine, counting=True,
                                                  users=participants, studies=studies)
             count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
@@ -157,7 +131,7 @@ def search_timebin(
             continue
 
         print(f"There are {count_of_data} data points, getting data.")
-        data = query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine, users=participants, studies=studies)
+        data = ut.query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine, users=participants, studies=studies)
         # print(f"data object from raw table query is of type {type(data)}")
         for row in data:
             row_as_dict = dict(row)
@@ -172,19 +146,11 @@ def search_timebin(
 
 # TRANSFORM
 @task(log_stdout=True)
-def chronicle_process(rawdatatable, tz_input="UTC"):
+def chronicle_process(rawdatatable):
     ''' rawdatatable: pandas dataframe passed in from the search_timebin function.'''
     if rawdatatable.shape[0] == 0:
         print("No found app usages :-\ ...")
         return None
-
-    # timezone = pendulum.timezone(tz_input)
-    # if startdatetime is not None:
-    #     startdatetime = str(startdatetime)
-    #     startdatetime = pendulum.parse(startdatetime, tz=timezone)
-    # if enddatetime is not None:
-    #     enddatetime = str(enddatetime)
-    #     enddatetime = pendulum.parse(enddatetime, tz=timezone)
 
     # Loop over all participant IDs (could be parallelized at some point):
     preprocessed_data = []
@@ -196,7 +162,7 @@ def chronicle_process(rawdatatable, tz_input="UTC"):
             print(f"Analyzing data for {person}:  {df.shape[0]} datapoints.")
 
             # ------- PREPROCESSING - 1 person at a time. RETURNS DF
-            person_df_preprocessed = chronicle_process_functions.get_person_preprocessed_data.run(
+            person_df_preprocessed = preprocessing.get_person_preprocessed_data.run(
                 person,
                 rawdatatable
             )
@@ -237,34 +203,6 @@ def export_csv(data, filepath, filename):
 
 
 # WRITE - REDSHIFT
-@task
-def query_export_table(start, end, timezone, counting=True, users=[], studies=[]):
-    '''Helper function -  SQL query passed to the usage exports table
-    makes queries - to count and also to delete data.
-    '''
-    # Timestamp must be converted to the timezone of the production db (which is UTC) for proper comparison
-    timezone_of_data = timezone
-
-    start_utc = pendulum.parse(start, tz=timezone_of_data).in_tz('UTC') #must be timezone of the system
-    end_utc = pendulum.parse(end, tz=timezone_of_data).in_tz('UTC')
-
-    selection = "SELECT count(*)" if counting else "DELETE"
-
-    if len(users) > 0:
-        person_filter = f''' and \"participant_id\" = \'{users}\''''
-    else:
-        person_filter = ""
-    if len(studies) > 0:
-        study_filter = f''' and \"study_id\" IN ({', '.join(f"'{s}'" for s in studies)})'''
-    else:
-        study_filter = ""
-
-    data_query = f'''{selection} from preprocessed_usage_events
-            WHERE "app_datetime_start" between '{start_utc}' and '{end_utc}' 
-            {person_filter}{study_filter};'''
-
-    return data_query
-
 @task(log_stdout=True)
 def write_preprocessed_data(dataset, conn, retries=3):
     # get rid of python NaTs for empty timestamps
@@ -294,7 +232,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                 timezone = df['app_timezone'].unique()[0]
                 studies = df['study_id'].unique().tolist()
 
-                older_data_q = query_export_table.run(start_range, end_range, timezone,
+                older_data_q = ut.query_export_table.run(start_range, end_range, timezone,
                                                       counting=True,
                                                       users=p,
                                                       studies=studies)
@@ -309,7 +247,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
                         f"Found {older_data_count} older rows overlapping in time range for user {p}. Dropping before proceeding.")
 
                     # This is only executed if needed
-                    drop_query = query_export_table.run(start_range, end_range, timezone,
+                    drop_query = ut.query_export_table.run(start_range, end_range, timezone,
                                                     counting=False,
                                                     users=p,
                                                     studies=studies)
@@ -379,6 +317,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
     print("Preprocessing pipeline finished!")
     print("#-----------------------------------------------#")
 
+
 @task(log_stdout=True)
 def how_export(data, filepath, filename, conn, format="csv"):
     # print(data)
@@ -418,7 +357,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         raw = search_timebin(startdatetime, enddatetime, tz_input, engine, participants, studies)
 
         # Transform:
-        processed = chronicle_process(raw, tz_input)
+        processed = chronicle_process(raw)
 
         # Write out:
         conn = connect(dbuser, password, hostname, port, type="psycopg2")

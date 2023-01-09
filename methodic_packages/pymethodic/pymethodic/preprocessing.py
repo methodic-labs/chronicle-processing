@@ -3,6 +3,7 @@ from pytz import timezone
 from prefect import task
 import pandas as pd
 import numpy as np
+import dateutil.tz
 import pendulum
 # import os
 
@@ -51,14 +52,14 @@ def clean_data(thisdata):
     return thisdata
 
 @task
-def get_timestamps(curtime, prevtime=False, row=None, precision=60):
+def get_timestamps(curtime, prevtime=False, row=None, precision=60, localtz='UTC'):
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
     Returns a dataframe with the number of rows the number of time units (= precision in minutes).
     USE LOCAL TIME to extract the correct date (include timezone)
     '''
     if not prevtime:
-        starttime = curtime
+        starttime = curtime.astimezone(dateutil.tz.gettz(localtz))
         outtime = [{
             columns.prep_datetime_start: starttime,
             columns.prep_datetime_end: np.NaN,
@@ -83,7 +84,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     # Timedif will always be max=3600 sec for hourly chunks. Make check in UTC in case the timezones differ
     # timepoints_n = number of new rows
     # i.e., 3 rows if it is 3+ hrs of usage split into hourly chunks
-    timedif = (pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtimerounded).in_timezone('UTC'))
+    timedif = curtime - prevtimerounded
     timepoints_n = int(np.floor(timedif.seconds/precision)+int(timedif.days*24*60*60/precision))
 
     # run over timepoints and append datetimestamps
@@ -95,22 +96,23 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60):
     for timepoint in range(timepoints_n+1):
         starttime = prevtime if timepoint == 0 else prevtimerounded+delta #POWER OFF BEHAVIOR
         endtime = curtime if timepoint == timepoints_n else prevtimerounded+delta+timedelta(seconds=precision)
-        duration = np.round((pendulum.instance(endtime).in_timezone('UTC') - pendulum.instance(
-                starttime).in_timezone('UTC')).total_seconds())
+        duration = np.round((endtime - starttime).total_seconds())
+
+        starttime_local = starttime.astimezone(dateutil.tz.gettz(localtz))
+        endtime_local = endtime.astimezone(dateutil.tz.gettz(localtz))
 
         outmetrics = {
-            columns.prep_datetime_start: starttime,
-            columns.prep_datetime_end: endtime,
-            "date": starttime.strftime("%Y-%m-%d"),
-            "starttime": starttime.strftime("%H:%M:%S.%f"),
-            "endtime": endtime.strftime("%H:%M:%S.%f"),
-            "day": (starttime.weekday()+1)%7+1,
-            "weekdayMF": 1 if starttime.weekday() < 5 else 0,
-            "weekdayMTh": 1 if starttime.weekday() < 4 else 0,
-            "weekdaySTh": 1 if (starttime.weekday() < 4 or starttime.weekday()==6) else 0,
-            "hour": starttime.hour,
-            "quarter": int(np.floor(starttime.minute/15.))+1,
-            # Durations: convert start & end to UTC for consistency in case they're logged in diff timezones
+            columns.prep_datetime_start: starttime_local,
+            columns.prep_datetime_end: endtime_local,
+            "date": starttime_local.strftime("%Y-%m-%d"),
+            "starttime": starttime_local.strftime("%H:%M:%S.%f"),
+            "endtime": endtime_local.strftime("%H:%M:%S.%f"),
+            "day": (starttime_local.weekday()+1)%7+1,
+            "weekdayMF": 1 if starttime_local.weekday() < 5 else 0,
+            "weekdayMTh": 1 if starttime_local.weekday() < 4 else 0,
+            "weekdaySTh": 1 if (starttime_local.weekday() < 4 or starttime_local.weekday()==6) else 0,
+            "hour": starttime_local.hour,
+            "quarter": int(np.floor(starttime_local.minute/15.))+1,
             columns.prep_duration_seconds: duration
         }
 
@@ -174,8 +176,9 @@ def extract_usage(dataframe,precision=3600):
         interaction = row['app_record_type']
         app = row['app_full_name']
 
-        # USE LOCAL TIME - must be for `get_timestamps` to be correct when it infers dates
-        curtime = row.date_tzaware #app_date_logged
+        # USE UTC TIME to get durations - issues with daylight savings etc.
+        # Converts to local time within `get_timestamps` only to infer days/dates
+        curtime = row.app_date_logged  #date_tzaware
 
         # make dict entry of every app that was moved to foreground. Time is local.
         if interaction == 'Move to Foreground':
@@ -200,13 +203,11 @@ def extract_usage(dataframe,precision=3600):
 
             # ONLY applies to the one latest unbackgrounded app.
             if latest_unbackgrounded and app == latest_unbackgrounded['unbgd_app']:
-                # Make timediff check in UTC in case the timezones differ
-                timediff = pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(
-                    latest_unbackgrounded['fg_time']).in_timezone('UTC')
+                timediff = curtime - latest_unbackgrounded['fg_time']
 
                 if timediff < timedelta(seconds=1):
                     timepoints = get_timestamps.run(curtime, latest_unbackgrounded['unbgd_time'],
-                                                    precision=precision, row=row)
+                                                    precision=precision, row=row, localtz=row.app_timezone)
 
                     timepoints[columns.prep_record_type] = 'App Usage'
                     timepoints['app_timezone'] = row.app_timezone
@@ -222,19 +223,13 @@ def extract_usage(dataframe,precision=3600):
             if app in openapps.keys() and openapps[app]['open'] == True:
                 prevtime = openapps[app]['time']  # time it was opened - the raw data timestamp
 
-                # If the start/end of app usage is in different timezones, convert to the end timezone
-                # it they are the same, this changes nothing.
-                cur_tzname = curtime.tzinfo.zone
-                prevtime = prevtime.astimezone(cur_tzname)
-
-                # Checks that end (curtime) is later than start (prevtime) - in UTC in case the timezones differ
-                if pendulum.instance(curtime).in_timezone('UTC') - pendulum.instance(prevtime).in_timezone(
-                        'UTC') < timedelta(0):
-                    raise ValueError("ALARM ALARM: timepoints out of order !!")
+                # Checks that end (curtime) is later than start (prevtime)
+                if curtime-prevtime<timedelta(0):
+                    raise ValueError(f"ALARM: timepoints out of order for {app} starting {prevtime}, ending {curtime}!")
 
                 # HERE IS WHERE APP USAGE IS SPLIT INTO HOURLY CHUNKS AND DURATIONS ARE CALCULATED
                 # split up timepoints by precision, 3600 seconds (1 hr)
-                timepoints = get_timestamps.run(curtime, prevtime, precision=precision, row=row)
+                timepoints = get_timestamps.run(curtime, prevtime, precision=precision, row=row, localtz=row.app_timezone)
 
                 timepoints[columns.prep_record_type] = 'App Usage'
                 timepoints['app_timezone'] = row.app_timezone
@@ -248,7 +243,7 @@ def extract_usage(dataframe,precision=3600):
         # if the interaction is a part of screen non/interactive or notifications...
         # logic should be the same
         if interaction in other_interactions.keys():
-            timepoints = get_timestamps.run(curtime, precision=precision, row=row)
+            timepoints = get_timestamps.run(curtime, precision=precision, row=row, localtz=row.app_timezone)
             timepoints[columns.prep_record_type] = other_interactions[interaction]
             timepoints['app_timezone'] = row.app_timezone
             timepoints['study_id'] = row.study_id
@@ -353,4 +348,25 @@ def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
     return data_fordownload
     
     
+@task(log_stdout=True)
+def get_person_preprocessed_data(
+    person: "the participantID",
+    datatable: "the raw data",
+) -> pd.DataFrame:
+    '''
+    Select the data to be preprocessed, one person at a time, and run through preprocessor
+    '''
 
+    df = datatable.loc[datatable['participant_id'] == person]
+    print(f"Person with ID {person} has {df.shape[0]} datapoints.")
+
+    column_replacement = columns.column_rename
+    df = df.rename(columns=column_replacement)
+
+    ###---------- PREPROCESS HERE!! RETURNS DF. NEED TO ROWBIND
+    df_prep = preprocess_dataframe.run(df, sessioninterval = [30])
+
+    if isinstance(df_prep, None.__class__):
+        return df_prep
+
+    return df_prep
