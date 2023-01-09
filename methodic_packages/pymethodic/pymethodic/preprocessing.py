@@ -56,7 +56,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60, localtz='UTC
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
     Returns a dataframe with the number of rows the number of time units (= precision in minutes).
-    USE LOCAL TIME to extract the correct date (include timezone)
+    USE LOCAL TIME to extract the correct date (include timezone) but UTC to extract duration.
     '''
     if not prevtime:
         starttime = curtime.astimezone(dateutil.tz.gettz(localtz))
