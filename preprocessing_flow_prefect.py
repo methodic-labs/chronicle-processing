@@ -14,10 +14,12 @@ from prefect import task, Flow, Parameter
 from prefect.run_configs import DockerRun
 from prefect.storage import GitHub
 from prefect.tasks.secrets import PrefectSecret
+
+# Search path must be updated before referencing things in methodic_packages.
+sys.path.insert(1,'/chronicle-processing')
 from methodic_packages.pymethodic import utils as ut
 from methodic_packages.pymethodic import preprocessing
 
-sys.path.insert(1,'/chronicle-processing')
 # import chronicle_process_functions
 
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
