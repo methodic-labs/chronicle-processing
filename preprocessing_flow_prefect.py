@@ -4,6 +4,7 @@ import time
 from datetime import timedelta
 from uuid import uuid4
 
+import logging
 import numpy as np
 import pandas as pd
 import pendulum
@@ -14,15 +15,18 @@ from prefect import task, Flow, Parameter
 from prefect.run_configs import DockerRun
 from prefect.storage import GitHub
 from prefect.tasks.secrets import PrefectSecret
-from methodic_packages.pymethodic import utils as ut
+sys.path.insert(1,'/chronicle-processing')
+from methodic_packages.pymethodic.pymethodic import utils as ut
 from methodic_packages.pymethodic import preprocessing
 
-sys.path.insert(1,'/chronicle-processing')
-# import chronicle_process_functions
 
+# import chronicle_process_functions
+#LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
+
+#########################
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
 # Timezone is UTC by default, but can be changed with an input arg
-#LocalAgent().start() #used for running from laptop with Local Agent instead of Docker
+
 
 @task(checkpoint=False)
 def connect(dbuser, password, hostname, port, type="sqlalchemy"):
@@ -141,15 +145,17 @@ def search_timebin(
         time_interval = 720  # reset to original
     print("#-------------------------------#")
     print("Finished retrieving raw data!")
+    logger.INFO(f"Finished retrieving raw data!")
     return pd.DataFrame(all_hits)
 
 
 # TRANSFORM
 @task(log_stdout=True)
-def chronicle_process(rawdatatable):
+def chronicle_process(rawdatatable, run_id):
     ''' rawdatatable: pandas dataframe passed in from the search_timebin function.'''
     if rawdatatable.shape[0] == 0:
         print("No found app usages :-\ ...")
+        logger.INFO("No found app usages :-\ ...")
         return None
 
     # Loop over all participant IDs (could be parallelized at some point):
@@ -159,7 +165,8 @@ def chronicle_process(rawdatatable):
     if len(ids) > 0:
         for person in ids:
             df = rawdatatable.loc[rawdatatable['participant_id'] == person]
-            print(f"Analyzing data for {person}:  {df.shape[0]} datapoints.")
+            print(f"Analyzing data for {person}:  {df.shape[0]} datapoints.")  #CONVERT TO STREAM LOGGER?
+            logger.INFO(f"Analyzing data for {person}:  {df.shape[0]} datapoints.")
 
             # ------- PREPROCESSING - 1 person at a time. RETURNS DF
             person_df_preprocessed = preprocessing.get_person_preprocessed_data.run(
@@ -168,20 +175,19 @@ def chronicle_process(rawdatatable):
             )
 
             if isinstance(person_df_preprocessed, None.__class__):
-                print(f"After preprocessing, no data remaining for person {person}.")
+                print(f"After preprocessing, no data remaining for person {person}.") #CONVERT TO LOGGER ADD RUN_ID
                 continue
 
             preprocessed_data.append(person_df_preprocessed)
 
         if not preprocessed_data or all(x is None for x in preprocessed_data):
-            print(f"No participants found in this date range")
+            print(f"No participants found in this date range") #CONVERT TO LOGGER ADD RUN_ID
             pass
         elif len(preprocessed_data) > 0:
             preprocessed_data = pd.concat(preprocessed_data)
-            run_id = pendulum.now().strftime('%Y-%m%d-%H%M%S-') + str(uuid4())
             preprocessed_data.insert(0, 'run_id', run_id)
             print("#######################################################################")
-            print(f"## Finished preprocessing, with {preprocessed_data.shape[0]} total rows! ##")
+            print(f"## Finished preprocessing, with {preprocessed_data.shape[0]} total rows! ##") #CONVERT TO LOGGER ADD RUN_ID
             print("#######################################################################")
 
 
@@ -201,7 +207,7 @@ def export_csv(data, filepath, filename):
             except:
                 raise ValueError("You must specify a filepath and a filename to output a csv!")
 
-
+#CONVERT TO LOGGER ADD RUN_ID
 # WRITE - REDSHIFT
 @task(log_stdout=True)
 def write_preprocessed_data(dataset, conn, retries=3):
@@ -259,6 +265,7 @@ def write_preprocessed_data(dataset, conn, retries=3):
             if i < tries - 1:  # i is zero indexed
                 print(e)
                 print("Rolling back and retrying...")
+                logger.exception("Rolling back and retrying...")
                 cursor.execute("ROLLBACK")
                 conn.commit()
                 time.sleep(5)
@@ -306,16 +313,19 @@ def write_preprocessed_data(dataset, conn, retries=3):
             cursor.execute(write_new_query)
             print(
                 f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
+            logger.INFO(f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone.")
 
             chunk_startrow = chunk_endrow
             print(
                 f"Chunk {iteration_count} written.")
+            logger.INFO(f"Chunk {iteration_count} written.")
             iteration_count += 1
 
     conn.commit()  # DOESN'T HAPPEN UNTIL THE COMMIT
     print("#-----------------------------------------------#")
     print("Preprocessing pipeline finished!")
     print("#-----------------------------------------------#")
+    logger.INFO("Preprocessing pipeline finished!")
 
 
 @task(log_stdout=True)
@@ -323,16 +333,32 @@ def how_export(data, filepath, filename, conn, format="csv"):
     # print(data)
     if data is None:
         print("No found app usages for time period. Nothing written, pipeline exiting.")
+        logger.INFO("No found app usages for time period. Nothing written, pipeline exiting.")
     if format=="csv":
         export_csv.run(data, filepath=filepath, filename=filename)
     else:
         write_preprocessed_data.run(data, conn)
 
-#This needs to happen outside of main, otherwise prefect will not detect the flow.
+# This needs to happen outside of main, otherwise prefect will not detect the flow.
 daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
 start_default = str(daily_range[0])
 end_default = str(daily_range[1])
 # default_pwd = PrefectSecret("dbpassword").run()
+run_id = pendulum.now().strftime('%Y-%m%d-%H%M%S-') + str(uuid4())
+
+# Set up the logger object
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter(f'(asctime) - (process)d - run_id {run_id} - %(name)s - %(levelname)s - %(message)s')
+
+file_handler = logging.FileHandler('preprocessing_output.log')
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 # builds the DAG
 with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
@@ -357,7 +383,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
         raw = search_timebin(startdatetime, enddatetime, tz_input, engine, participants, studies)
 
         # Transform:
-        processed = chronicle_process(raw)
+        processed = chronicle_process(raw, run_id)
 
         # Write out:
         conn = connect(dbuser, password, hostname, port, type="psycopg2")
@@ -368,6 +394,7 @@ with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-pro
             how_export(processed, filepath, filename, conn, format = export_format)
         except NameError:
             print("No data to process. Pipeline exiting")
+            logger.ERROR("No data to process. Pipeline exiting")
 
 
 def main():
