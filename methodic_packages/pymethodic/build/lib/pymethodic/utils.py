@@ -7,11 +7,11 @@ import pandas as pd
 import numpy as np
 import pendulum
 
-@task
-def logger(message, level=1):
-    time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
-    print("%s %s: %s"%(prefix,time,message))
+# @task
+# def logger(message, level=1):
+#     time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+#     prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
+#     print("%s %s: %s"%(prefix,time,message))
 
 def get_dt(row):
     '''

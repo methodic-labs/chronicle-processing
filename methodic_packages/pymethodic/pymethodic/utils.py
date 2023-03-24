@@ -6,12 +6,51 @@ import dateutil.tz
 import pandas as pd
 import numpy as np
 import pendulum
+import psycopg2
+import logging
 
-@task
-def logger(message, level=1):
+# @task
+def print_helper(message, level=1):
     time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     prefix = "༼ つ ◕_◕ ༽つ" if level==0 else "-- "
     print("%s %s: %s"%(prefix,time,message))
+
+
+def write_to_log(run_id, logfilename):
+    '''
+    Creates a logger object that outputs to a log file, to the filename specified,
+    and also streams to console.
+    '''
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(f'%(asctime)s: RUN ID:{run_id}:%(levelname)s: %(message)s',
+                                  datefmt='%y-%m-%d %H:%M:%S')
+    file_handler = logging.FileHandler(logfilename)
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    if not logger.hasHandlers():
+        logger.addHandler(file_handler)
+        logger.addHandler(stream_handler)
+
+    return logger
+
+
+def write_log_summary(run_id, studies, conn, message):
+    '''Writes messages into a summary table about all of the preprocessing jobs that have occurred.
+    This table is a more concise summary of integrations (1-2 lines per job) than the log file.'''
+    time_of_log = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    studies_str = ','.join(map(str, studies))
+    line_list = [[time_of_log, run_id, studies_str, message]]
+    line_list = np.asarray(line_list, dtype=object)
+
+    cursor = conn.cursor()
+    args_str = b','.join(cursor.mogrify("(%s,%s,%s,%s)", x) for x in tuple(map(tuple, line_list)))
+
+    write_line = "INSERT INTO preprocessed_runs_record (time_of_log, run_id, studies, \
+        log_line) VALUES" + args_str.decode("utf-8")
+    cursor.execute(write_line)
 
 def get_dt(row):
     '''

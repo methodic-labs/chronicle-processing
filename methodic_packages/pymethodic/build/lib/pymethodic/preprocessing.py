@@ -28,18 +28,18 @@ def clean_data(thisdata):
     - sorts events from the same 10ms by (1) foreground, (2) background
     '''
     utils.logger.run("Cleaning data", level = 1)
-    thisdata = thisdata.dropna(subset=['app_record_type', 'app_date_logged'])
-    thisdata = thisdata.drop_duplicates(ignore_index = True)
+    thisdata = thisdata.dropna(subset=['app_record_type', 'app_date_logged']).copy()
+    thisdata = thisdata.drop_duplicates(ignore_index = True).copy()
     if len(thisdata)==0:
         return(thisdata)
-    thisdata = thisdata[thisdata['app_record_type'] != 'Usage Stat']
+    thisdata = thisdata.loc[thisdata['app_record_type'] != 'Usage Stat']
     if not 'app_timezone' in thisdata.keys() or any(thisdata['app_timezone']==None):
         utils.logger.run("WARNING: Record has no timezone information.  Registering reported time as UTC.")
         thisdata['app_timezone'] = "UTC"
     if not 'app_title' in thisdata.columns:
         thisdata['app_title'] = ""
     thisdata['app_title'] = thisdata['app_title'].fillna("")
-    thisdata = thisdata[['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged', 'app_timezone']]
+    thisdata = thisdata[['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged', 'app_timezone']].copy()
     # fill timezone by preceding timezone and then backwards
     thisdata = thisdata.sort_values(by=['app_date_logged']).\
         reset_index(drop=True).\
@@ -56,7 +56,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60, localtz='UTC
     '''
     Function transforms an app usage statistic into bins (according to the desired precision).
     Returns a dataframe with the number of rows the number of time units (= precision in minutes).
-    USE LOCAL TIME to extract the correct date (include timezone)
+    USE LOCAL TIME to extract the correct date (include timezone) but UTC to extract duration.
     '''
     if not prevtime:
         starttime = curtime.astimezone(dateutil.tz.gettz(localtz))
