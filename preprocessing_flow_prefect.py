@@ -97,8 +97,7 @@ def search_timebin(
     while starttime_chunk < endtime_range:
 
         endtime_chunk = min(endtime_range, starttime_chunk + timedelta(minutes=time_interval))
-        logger.info(f"""#---------------------------------------------------------#
-                Searching {starttime_chunk} to {endtime_chunk}""")
+        logger.info(f"""#----Searching {starttime_chunk} to {endtime_chunk} ----#""")
 
         first_count = ut.query_usage_table.run(starttime_chunk, endtime_chunk, filters, engine,
                                         counting=True, users=participants, studies=studies)
@@ -213,6 +212,7 @@ def write_preprocessed_data(run_id, dataset, conn, retries=3):
                 
     if dataset is None or dataset.empty:
         logger.info(f"No data to write! Pipeline is exiting.")
+        ut.write_log_summary.run(run_id, "", conn, "No data to write! Pipeline is exiting.")
         return
 
     participants = dataset['participant_id'].unique().tolist()
