@@ -27,19 +27,19 @@ def clean_data(thisdata):
     - extracts datetime information and rounds to 10ms
     - sorts events from the same 10ms by (1) foreground, (2) background
     '''
-    utils.logger.run("Cleaning data", level = 1)
-    thisdata = thisdata.dropna(subset=['app_record_type', 'app_date_logged'])
-    thisdata = thisdata.drop_duplicates(ignore_index = True)
+    utils.print_helper.run("Cleaning data", level = 1)
+    thisdata = thisdata.dropna(subset=['app_record_type', 'app_date_logged']).copy()
+    thisdata = thisdata.drop_duplicates(ignore_index = True).copy()
     if len(thisdata)==0:
         return(thisdata)
-    thisdata = thisdata[thisdata['app_record_type'] != 'Usage Stat']
+    thisdata = thisdata.loc[thisdata['app_record_type'] != 'Usage Stat']
     if not 'app_timezone' in thisdata.keys() or any(thisdata['app_timezone']==None):
-        utils.logger.run("WARNING: Record has no timezone information.  Registering reported time as UTC.")
+        utils.print_helper.run("WARNING: Record has no timezone information.  Registering reported time as UTC.")
         thisdata['app_timezone'] = "UTC"
     if not 'app_title' in thisdata.columns:
         thisdata['app_title'] = ""
     thisdata['app_title'] = thisdata['app_title'].fillna("")
-    thisdata = thisdata[['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged', 'app_timezone']]
+    thisdata = thisdata[['study_id', 'participant_id', 'app_title', 'app_full_name', 'app_record_type', 'app_date_logged', 'app_timezone']].copy()
     # fill timezone by preceding timezone and then backwards
     thisdata = thisdata.sort_values(by=['app_date_logged']).\
         reset_index(drop=True).\
@@ -287,7 +287,7 @@ def check_overlap_add_sessions(data, session_def = [5*60]):
         # If an entry started before the previous row closed - 1)warn,
         # ...2) overwrite/shorten endtime to next start time, 3) recalc duration
         if nousetime < timedelta(microseconds=0) and row[columns.prep_datetime_start].date == row[columns.prep_datetime_end].date:
-            utils.logger(
+            utils.print_helper(
                 f'''WARNING: Overlapping usage for participant {row['participant_id']}: {data_nonzero.iloc[idx - 1][columns.full_name]}
                     was open since {data_nonzero.iloc[idx - 1][columns.prep_datetime_start].strftime("%Y-%m-%d %H:%M:%S")} 
                     when {row[columns.full_name]} was opened on {row[columns.prep_datetime_start].strftime("%Y-%m-%d %H:%M:%S")}. \
@@ -320,12 +320,12 @@ def log_exceed_durations_minutes(row, threshold, outfile):
 @task
 def preprocess_dataframe(dataframe, precision=3600,sessioninterval = [5*60]):
     # dataframe = utils.backwards_compatibility(dataframe)
-    utils.logger.run("LOG: Extracting usage...",level=1)
+    utils.print_helper.run("LOG: Extracting usage...", level=1)
     tmp = extract_usage.run(dataframe,precision=precision)   #HERE get app durations
     if not isinstance(tmp,pd.DataFrame) or np.sum(tmp[columns.prep_duration_seconds]) == 0:
-        utils.logger.run(f"WARNING: Person {dataframe['participant_id'].iloc[0]} does not seem to contain relevant data.  Skipping...")
+        utils.print_helper.run(f"WARNING: Person {dataframe['participant_id'].iloc[0]} does not seem to contain relevant data.  Skipping...")
         return None
-    utils.logger.run("LOG: checking overlap session...",level=1)
+    utils.print_helper.run("LOG: checking overlap session...", level=1)
     data = check_overlap_add_sessions.run(tmp,session_def=sessioninterval)
     data = utils.add_warnings.run(data) #Add flags for long usage or usage gaps
     non_timed = tmp[tmp[columns.prep_duration_seconds].isna()]
