@@ -60,7 +60,7 @@ def chronicle_process_by_date(startdatetime, enddatetime, engine,
         print(f"## Processing {start_iso} to {enddatetime.isoformat()} PST ##")
         print("#######################################################################")
 
-        ut.logger("Grabbing data...", level=0)
+        ut.print_helper("Grabbing data...", level=0)
 
         # GET RAW DATA - filter by studies and/or participants
         data_written = chronicle_process_functions.search_timebin(
@@ -141,7 +141,7 @@ def chronicle_process(rawdatatable, startdatetime = None, enddatetime = None, da
     '''
 
     if rawdatatable.shape[0] == 0:
-        ut.logger("No found app usages :-\ ...")
+        ut.print_helper("No found app usages :-\ ...")
         return None
 
     # loop over all participant IDs (could be parellized if
@@ -156,7 +156,7 @@ def chronicle_process(rawdatatable, startdatetime = None, enddatetime = None, da
     if len(ids) > 0:
         for person in ids:
             df = rawdatatable.loc[rawdatatable['participant_id'] == person]
-            ut.logger(f"Analyzing data for {person}:  {df.shape[0]} datapoints.", level=0)
+            ut.print_helper(f"Analyzing data for {person}:  {df.shape[0]} datapoints.", level=0)
 
 
             # PREPROCESSING - 1 person at a time. RETURNS DF
@@ -172,7 +172,7 @@ def chronicle_process(rawdatatable, startdatetime = None, enddatetime = None, da
             preprocessed_data.append(person_df_preprocessed)
 
             if isinstance(person_df_preprocessed, None.__class__):
-                ut.logger(f"After preprocessing, no data remaining for person {person}/{rawdatatable.shape[0]}.", level=0)
+                ut.print_helper(f"After preprocessing, no data remaining for person {person}/{rawdatatable.shape[0]}.", level=0)
                 continue
 
     #--------- WRITE SOMEWHERE
@@ -181,10 +181,10 @@ def chronicle_process(rawdatatable, startdatetime = None, enddatetime = None, da
         if len(preprocessed_data) > 0:
             preprocessed_data = pd.concat(preprocessed_data)
     else:
-        ut.logger(f"No participants found in this date range")
+        ut.print_helper(f"No participants found in this date range")
 
     print("#---------------------------------------------#")
-    ut.logger("Pipeline finished successfully !", level=0)
+    ut.print_helper("Pipeline finished successfully !", level=0)
     return preprocessed_data
 
 
