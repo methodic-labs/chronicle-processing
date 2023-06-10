@@ -16,7 +16,7 @@ on:
   push:
     branches:
       - master
-      - prefect2_prep
+      - develop
 
 jobs:
   push_to_registry:
