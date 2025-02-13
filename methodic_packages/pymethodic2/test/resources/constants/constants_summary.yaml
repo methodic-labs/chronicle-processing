@@ -1,0 +1,20 @@
+dur_mean:
+  0: 100.0
+dur_std:
+  0: 91.65151389911681
+engage_60s_cnt_mean:
+  0: 2
+engage_60s_cnt_std:
+  0: 1.7320508075688772
+engage_60s_dur_mean:
+  0: 33.333333333333336
+engage_60s_dur_std:
+  0: 30.55050463303893
+num_days:
+  0: 3
+participant_id:
+  0: ChronicleData_preprocessed-TestParticipant
+switchpermin_mean:
+  0: 0.01388888888888889
+switchpermin_std:
+  0: 0.012729376930432893
