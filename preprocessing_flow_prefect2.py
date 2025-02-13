@@ -17,9 +17,10 @@ from prefect import variables
 from prefect.blocks.system import Secret, String
 
 sys.path.insert(1,'/chronicle-processing')
-from methodic_packages.methodic_cogs.methodic_cogs import utils as ut
-from methodic_packages.methodic_cogs import preprocessing
+from methodic_packages.methodicpy.methodicpy import utils as ut
+from methodic_packages.methodicpy import preprocessing
 
+#### KIM NOTES - USE HEAD AND NOT main. HEAD HAD THE LOGGER ADDED, WHICH IS MORE RECENT.
 
 #########################
 #--------- Preprocessing and Summarizing Chronicle data via Methodic. By date, specific participant and/or by study
@@ -40,16 +41,26 @@ def connect(dbuser, password, hostname, port, type="sqlalchemy"):
                                 dbname='redshift')
         return conn
 
+@task
+# FOR DAILY PROCESSING
+def default_time_params(tz_input="UTC"):
+    ''' set default start time - midnight UTC.
+    Daily processing needs to go back 2 days to correctly set the flag for "large time gap" (1 day)'''
+    timezone = pendulum.timezone(tz_input)
+    start_default = pendulum.today(timezone).subtract(days=3)
+    end_default = pendulum.today(timezone).subtract(days=2)
+
+    return (start_default, end_default)
 
 
 # EXTRACT - Now must be a flow to use other tasks.
 @flow(name="search_timebin")
 def search_timebin(
-    start,
-    end,
-    tz_input,
-    engine,
-    logger,
+        start,
+        end,
+        tz_input,
+        engine,
+        logger,
     participants = [], studies = []) -> pd.DataFrame:
     '''
     Collects all data points in the chronicle_usage_events table in a certain time interval.
@@ -58,6 +69,7 @@ def search_timebin(
     '''
 
     timezone = pendulum.timezone(tz_input)
+
     starttime_range = start.in_tz(timezone)
     endtime_range = end.in_tz(timezone)
 
@@ -86,6 +98,7 @@ def search_timebin(
     while starttime_chunk < endtime_range:
 
         endtime_chunk = min(endtime_range, starttime_chunk + timedelta(minutes=time_interval))
+
         logger.info(f"""#----Searching {starttime_chunk} to {endtime_chunk} ----#""")
 
         first_count = ut.query_usage_table(starttime_chunk, endtime_chunk, filters, engine,
@@ -114,8 +127,7 @@ def search_timebin(
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             logger.info(f"Now searching between {starttime_chunk} and {end_interval}.")
 
-            second_count = ut.query_usage_table(starttime_chunk, end_interval, filters, engine, counting=True,
-                                                 users=participants, studies=studies)
+            second_count = ut.query_usage_table(starttime_chunk, end_interval, filters, engine, counting=True,                                                 users=participants, studies=studies)
             count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
             time_interval = refined_time
@@ -171,26 +183,25 @@ def chronicle_process(rawdatatable, run_id, logger):
                 logger.info(f"After preprocessing, no data remaining for person {person}.")
                 continue
 
-            else:
-                preprocessed_data.append(person_df_preprocessed)
+            preprocessed_data.append(person_df_preprocessed)
 
         if not preprocessed_data or all(x is None for x in preprocessed_data):
             logger.info(f"No participants found in this date range")
             pass
         elif len(preprocessed_data) > 0:
             # print(f"Preprocessed data is {type(preprocessed_data)} of length {len(preprocessed_data)} , entire thing {preprocessed_data}")
-            # preprocessed_final = pd.concat(preprocessed_data, ignore_index=True)
-            return pd.concat(preprocessed_data, ignore_index=True)
-            # preprocessed_final.insert(0, 'run_id', run_id)
-            # logger.info(f"## Finished preprocessing, with {preprocessed_final.shape[0]} total rows! ##")
+            preprocessed_data = pd.concat(preprocessed_data, ignore_index=True)
+            # return pd.concat(preprocessed_data, ignore_index=True)
+            preprocessed_data.insert(0, 'run_id', run_id)
+            logger.info(f"## Finished preprocessing, with {preprocessed_data.shape[0]} total rows! ##")
 
-    # logger.info(f"""#---------------------------------------------#
-    #                 Data preprocessed!""")
-    # return preprocessed_final
+    logger.info(f"""#---------------------------------------------#
+                    Data preprocessed!""")
+    return preprocessed_data
 
 
 # WRITE - CSV
-@flow(name="write_csv")
+# @flow(name="write_csv")
 def export_csv(data, logger, filepath, filename):
     if isinstance(data, pd.DataFrame):
         if filepath and filename:
@@ -199,12 +210,14 @@ def export_csv(data, logger, filepath, filename):
                 logger.info(f"Data written to csv!")
             except:
                 logger.error("You must specify a filepath and a filename to output a csv!")
-                raise ValueError("You must specify a filepath and a filename to output a csv!")
 
 
 # WRITE - REDSHIFT
-@flow(name="write_db")
+
+# @flow(name="write_db")
+# @task(log_stdout=True)
 def write_preprocessed_data(dataset, conn, logger, retries=3):
+
     # get rid of python NaTs for empty timestamps
     if isinstance(dataset, pd.DataFrame):
         dataset[['app_datetime_end', 'app_duration_seconds']] = \
@@ -234,7 +247,7 @@ def write_preprocessed_data(dataset, conn, logger, retries=3):
                 timezone = df['app_timezone'].unique()[0]
                 studies = df['study_id'].unique().tolist()
 
-                older_data_q = ut.query_export_table(start_range, end_range, timezone,
+                older_data_q = ut.query_export_table.run(start_range, end_range, timezone,
                                                       counting=True,
                                                       users=p,
                                                       studies=studies)
@@ -249,7 +262,7 @@ def write_preprocessed_data(dataset, conn, logger, retries=3):
                         f"Found {older_data_count} older rows overlapping in time range for user {p}. Dropping before proceeding.")
 
                     # This is only executed if needed
-                    drop_query = ut.query_export_table(start_range, end_range, timezone,
+                    drop_query = ut.query_export_table.run(start_range, end_range, timezone,
                                                     counting=False,
                                                     users=p,
                                                     studies=studies)
@@ -301,11 +314,12 @@ def write_preprocessed_data(dataset, conn, logger, retries=3):
                                   tuple(map(tuple, chunk_df)))
 
             write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
-                app_record_type, app_title, app_full_name,\
+                interaction_type, app_title, app_full_name,\
                 app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
                day, weekdayMF, weekdayMTh, weekdaySTh, \
                app_engage_30s, app_switched_app, app_usage_flags) VALUES" + chunk_str.decode("utf-8")
             cursor.execute(write_new_query)
+
             message = f"{cursor.rowcount} rows of preprocessed data written to exports table, from {pendulum.parse(start_range).to_datetime_string()} to {pendulum.parse(end_range).to_datetime_string()} {timezone} timezone."
             logger.info(message)
             ut.write_log_summary(run_id, studies, conn, message)
@@ -323,7 +337,7 @@ def write_preprocessed_data(dataset, conn, logger, retries=3):
     ut.write_log_summary(run_id,studies, conn, "Preprocessing pipeline finished!")
 
 
-@flow(name="how_export")
+# @flow(name="how_export")
 def how_export(data, studies, filepath, filename, conn, logger, format="csv"):
     # print(data)
     if data is None:
@@ -339,10 +353,16 @@ def how_export(data, studies, filepath, filename, conn, logger, format="csv"):
 ### Set up metadata for rums - run ID and logger
 run_id = pendulum.now().strftime('%Y-%m%d-%H%M%S-') + str(uuid4())
 
+#This needs to happen outside of main, otherwise prefect will not detect the flow.
+daily_range = default_time_params.run() #needs to be in this format to work outside of Flow
+start_default = str(daily_range[0])
+end_default = str(daily_range[1])
+# default_pwd = PrefectSecret("dbpassword").run()
+
 
 # builds the DAG
 # with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
-@flow(name="preprocessing_daily")
+# @flow(name="preprocessing_daily")
 def preprocessing_daily_flow():
     # Set up the logger object
     logger = ut.write_to_log(run_id, 'preprocessing_output.log')
@@ -394,6 +414,45 @@ def preprocessing_daily_flow():
             """)
         ut.write_log_summary(run_id, studies, conn,
                                  f"No data to process for {studies} between {start_default} and {end_default}. Pipeline exiting.")
+#
+# =======
+
+
+
+# # builds the DAG
+# with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
+#         # Set up input parameters
+#         startdatetime = Parameter("startdatetime", default = start_default) #'Start datetime for interval to be integrated.'
+#         enddatetime = Parameter("enddatetime", default = end_default) #'End datetime for interval to be integrated.'
+#         tz_input = Parameter("timezone", default="UTC")
+#         participants = Parameter("participants", default=[]) #"Specific participant(s) candidate_id.", required=False
+#         studies = Parameter("studies", default=[]) #"Specific study/studies.", required=False
+#         export_format = Parameter("export_format", default="")
+#         filepath = Parameter("filepath", default="")
+#         filename = Parameter("filename", default="")
+#         dbuser = Parameter("dbuser", default="datascience") # "Username to source database
+#         hostname = Parameter("hostname", default="chronicle.cey7u7ve7tps.us-west-2.redshift.amazonaws.com")
+#         port = Parameter("port", default=5439)  # Port of source database
+#         password = PrefectSecret("dbpassword")  # Password to source database
+#
+#         engine = connect(dbuser, password, hostname, port, type="sqlalchemy")
+#         print("Connection to raw data successful!")
+#
+#         # Extract:
+#         raw = search_timebin(startdatetime, enddatetime, tz_input, engine, participants, studies)
+#
+#         # Transform:
+#         processed = chronicle_process(raw)
+#
+#         # Write out:
+#         conn = connect(dbuser, password, hostname, port, type="psycopg2")
+#         print("Connection to export table successful!")
+#
+#         # For times when there's no data to preprocess, and "prrocessed' returns nothing and does not exist
+#         try:
+#             how_export(processed, filepath, filename, conn, format = export_format)
+#         except NameError:
+#             print("No data to process. Pipeline exiting")
 
 
 def main():
@@ -401,5 +460,9 @@ def main():
     flow.register(project_name="Preprocessing")
 
 if __name__ == '__main__':
+
     preprocessing_daily_flow()
+
+    # main()
+
 
