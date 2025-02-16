@@ -127,7 +127,8 @@ def search_timebin(
             end_interval = starttime_chunk + timedelta(minutes=refined_time)
             logger.info(f"Now searching between {starttime_chunk} and {end_interval}.")
 
-            second_count = ut.query_usage_table(starttime_chunk, end_interval, filters, engine, counting=True,                                                 users=participants, studies=studies)
+            second_count = ut.query_usage_table(starttime_chunk, end_interval, filters, engine, counting=True,
+                                                users=participants, studies=studies)
             count_of_data = second_count
             endtime_chunk = end_interval  # make the endtime = the refined endtime to properly advance time periods
             time_interval = refined_time
@@ -151,7 +152,7 @@ def search_timebin(
         time_interval = 720  # reset to original
 
     logger.info(f"Finished retrieving raw data!")
-    print(f"All hits is of type {type(all_hits)} with first element {all_hits[0]}.")
+    # print(f"All hits is of type {type(all_hits)} with first element {all_hits[0]}.")
     return pd.concat(all_hits)
 
 
@@ -217,7 +218,6 @@ def export_csv(data, logger, filepath, filename):
 # @flow(name="write_db")
 # @task(log_stdout=True)
 def write_preprocessed_data(dataset, conn, logger, retries=3):
-
     # get rid of python NaTs for empty timestamps
     if isinstance(dataset, pd.DataFrame):
         dataset[['app_datetime_end', 'app_duration_seconds']] = \
@@ -359,7 +359,6 @@ start_default = str(daily_range[0])
 end_default = str(daily_range[1])
 # default_pwd = PrefectSecret("dbpassword").run()
 
-
 # builds the DAG
 # with Flow("preprocessing_daily",storage=GitHub(repo="methodic-labs/chronicle-processing", path="preprocessing_flow_prefect.py"),run_config=DockerRun(image="methodiclabs/chronicle-processing")) as flow:
 # @flow(name="preprocessing_daily")
@@ -464,5 +463,4 @@ if __name__ == '__main__':
     preprocessing_daily_flow()
 
     # main()
-
 
