@@ -9,9 +9,9 @@ import pandas as pd
 import pendulum
 # sys.path.insert(1,'/chronicle-processing')
 # sys.path.insert(0, '/Users/kimengie/Dev/methodic-labs/chronicle-processing')
-from methodic_packages.pymethodic2.pymethodic2 import utils as ut
-from methodic_packages.pymethodic2.pymethodic2.constants import interactions
-from methodic_packages.pymethodic2 import preprocessing  #TO-DO - why fails when adding another .pymethodic2
+from pymethodic2 import utils as ut
+from pymethodic2.constants import interactions
+from pymethodic2 import preprocessing  #TO-DO - why fails when adding another .pymethodic2
 
 run_id = pendulum.now().strftime('%Y-%m%d-%H%M%S-') + str(uuid4())
 logger = ut.write_to_log(run_id, 'preprocessing_output.log')

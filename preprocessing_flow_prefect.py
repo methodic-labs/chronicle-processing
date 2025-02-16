@@ -300,7 +300,7 @@ def write_preprocessed_data(run_id, dataset, conn, retries=3):
                                   tuple(map(tuple, chunk_df)))
 
             write_new_query = "INSERT INTO preprocessed_usage_events (run_id, study_id, participant_id, \
-                app_record_type, app_title, app_full_name,\
+                interaction_type, app_title, app_full_name,\
                 app_datetime_start, app_datetime_end, app_timezone, app_duration_seconds, \
                day, weekdayMF, weekdayMTh, weekdaySTh, \
                app_engage_30s, app_switched_app, app_usage_flags) VALUES" + chunk_str.decode("utf-8")
