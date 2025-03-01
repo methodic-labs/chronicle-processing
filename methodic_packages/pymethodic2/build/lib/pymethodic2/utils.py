@@ -8,9 +8,37 @@ import numpy as np
 import pendulum
 import psycopg2
 import logging
+import glob
+import os
 
 
-# @task
+def read_and_union_csvs(folder_path, file_pattern="*.csv"):
+    """
+    Reads and unions multiple CSV files from a folder into a single Pandas DataFrame.
+
+    Args:
+        folder_path (str): The path to the folder containing the CSV files.
+        file_pattern (str, optional): A file pattern to match CSV files. Defaults to "*.csv".
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the union of all CSV files.
+                          Prints the error message if no files or filepath is found
+    """
+    all_files = glob.glob(os.path.join(folder_path, file_pattern))
+    all_df = []
+    try:
+        for f in all_files:
+            df = pd.read_csv(f, parse_dates=[columns.raw_date_logged])
+            all_df.append(df)
+
+        print("Files concatenated:")
+        print('\n'.join(all_files))
+        merged_df = pd.concat(all_df, ignore_index=True)
+        return merged_df
+    except Exception as e:
+        print (e)
+
+
 def print_helper(message, level=1):
     time = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     prefix = "༼ つ ◕_◕ ༽つ" if level == 0 else "-- "

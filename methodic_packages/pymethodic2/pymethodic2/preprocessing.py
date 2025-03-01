@@ -97,7 +97,7 @@ def get_timestamps(curtime, prevtime=False, row=None, precision=60, localtz='UTC
     outtime = []
     total_duration = []
 
-    # START TIME IS SOMETIMES PREVIOUS TIME INSTEAD OF DATE LOGGED - HERE'S WHERE DISCREPANCIES CAN COME IN.
+    # START TIME IS SOMETIMES PREVIOUS TIME INSTEAD OF DATE LOGGED
     for timepoint in range(timepoints_n + 1):
         starttime = prevtime if timepoint == 0 else prevtimerounded + delta  # POWER OFF BEHAVIOR
         endtime = curtime if timepoint == timepoints_n else prevtimerounded + delta + timedelta(seconds=precision)
@@ -388,7 +388,7 @@ def get_person_preprocessed_data(
     column_replacement = columns.column_rename
     df = df.rename(columns=column_replacement)
 
-    ###---------- PREPROCESS HERE!! RETURNS DF. NEED TO ROWBIND
+    ###---------- PREPROCESS HERE!! RETURNS DF
     df_prep = preprocess_dataframe.run(df, sessioninterval=[30])
 
     if isinstance(df_prep, None.__class__):
