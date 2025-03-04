@@ -8,4 +8,4 @@ RUN apt-get update && apt-get install -y git libpq-dev
 RUN pip install pandas numpy uuid pendulum SQLAlchemy prefect psycopg2
 
 RUN git clone https://www.github.com/methodic-labs/chronicle-processing
-RUN pip install ./chronicle-processing/methodic_packages/methodicpy
+RUN pip install ./chronicle-processing/methodic_packages/pymethodic2

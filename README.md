@@ -5,6 +5,7 @@ Installation of the `pymethodic2` module (located here) is required.
 1. Clone this repository.
 2. In Terminal (Mac) or the command prompt (Windows) navigate to the `methodic_packages/pymethodic2` folder
 3. Type in `pip3 install .`
+4. To preprocess raw data on your local computer, use `Notebooks/chronicle_preprocessing_local.ipynb`. 
 
 
 The following fields are the outputs of Chronicle preprocessing:
