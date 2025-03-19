@@ -1,0 +1,12 @@
+user_interaction = 'User Interaction'
+notification_seen = 'Unknown importance: 10'
+notification_interruption = 'Unknown importance: 12'
+power_off = 'Device Shutdown'
+background = ['Move to Background', 'Activity Paused']
+foreground = ['Move to Foreground', 'Activity Resumed']
+screen_non_interactive1 = 'Screen Non-interactive'
+screen_non_interactive2 = 'Unknown importance: 16'
+screen_interactive1 = 'Screen Interactive'
+screen_interactive2 = 'Unknown importance: 15'
+wat = 'Unknown importance: 11'
+start_up = 'Device Startup'

@@ -4,7 +4,7 @@ import yaml
 
 # to write test after careful validations
 
-directory = "/Users/kimengie/Dev/chronicle-analysis/pymethodic/test/"
+directory = "/Users/kimengie/Dev/chronicle-analysis/pymethodic2/test/"
 encountered_file =  os.path.join(
     directory, 
     'resources/output/summary_daily.csv'

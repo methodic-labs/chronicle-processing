@@ -1,1 +1,1 @@
-from pymethodic import *
+from pymethodic2 import *

@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-setup(name='pymethodic',
+setup(name='pymethodic2',
       version='1.0',
       description='Package for preprocessing Chronicle data via Methodic.',
       author='Kim @ Methodic',
