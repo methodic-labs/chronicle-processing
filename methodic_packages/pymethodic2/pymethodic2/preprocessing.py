@@ -297,8 +297,8 @@ def check_overlap_add_sessions(data, session_def=[5 * 60]):
 
         # If an entry started before the previous row closed - 1)warn,
         # ...2) overwrite/shorten endtime to next start time, 3) recalc duration
-        if nousetime < timedelta(microseconds=0) and row[columns.prep_datetime_start].date == row[
-            columns.prep_datetime_end].date:
+        if idx > 0 and nousetime < timedelta(microseconds=0) and row[columns.prep_datetime_start].date() == row[
+            columns.prep_datetime_end].date():
             utils.print_helper(
                 f'''WARNING: Overlapping usage for participant {row['participant_id']}: {data_nonzero.iloc[idx - 1][columns.full_name]}
                     was open since {data_nonzero.iloc[idx - 1][columns.prep_datetime_start].strftime("%Y-%m-%d %H:%M:%S")} 
